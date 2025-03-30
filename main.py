@@ -278,9 +278,7 @@ class Simulator(tk.Tk):
 
         self.grid = np.zeros((40, 40), dtype=np.uint8)
 
-        # 在 __init__ 里初始化 PID 控制器
-        self.steering_pid = PID(Kp=2.0, Ki=0.1, Kd=0.5, output_limit=30)
-        self.speed_pid = PID(Kp=1.0, Ki=0.05, Kd=0.4, output_limit=10)
+
 
         self.on_mouse_control = False
         self.in_map_edit = False
@@ -701,6 +699,9 @@ class Simulator(tk.Tk):
             return
         # self.on_mouse_control = True
         self.log("打开鼠标跟随")
+        # 在 __init__ 里初始化 PID 控制器
+        self.steering_pid = PID(Kp=2.0, Ki=0.1, Kd=0.5, output_limit=30)
+        self.speed_pid = PID(Kp=2.0, Ki=0.15, Kd=0.8, output_limit=10)
         self.simulation_canvas.bind("<Button-1>", self.mouse_control)
 
 
@@ -1053,6 +1054,9 @@ class Simulator(tk.Tk):
             return
         # if self.serial is None:##你不许读串口
         #     self.log("请先开启串口")
+        #     return
+        if self.on_keyboard_control:
+            self.log("请先关闭鼠标控制")
             return
         if self.car is None:
             self.log("请先设置小车位置/朝向")
