@@ -813,7 +813,11 @@ class Simulator(tk.Tk):
         df = pd.DataFrame(self.lidar_result, columns=['degree', 'distance'])
         if(len(df) != 0):
             second_column = df['distance'].transpose()
-            second_column.to_csv(f'./mydata/raw/data{self.dataindex}.csv', index=False, header=False)
+            file_path = f'./mydata/raw/data{self.dataindex}.csv'
+            while os.path.exists(file_path):
+                self.dataindex += 1
+                file_path = f'./mydata/raw/data{self.dataindex}.csv'
+            second_column.to_csv(file_path, index=False, header=False)
             self.dataindex = self.dataindex + 1
             with open('index.txt', 'w') as f:
                 f.write(str(self.dataindex))
