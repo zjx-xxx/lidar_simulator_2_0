@@ -139,7 +139,11 @@ class Simulator(tk.Tk):
         button_height = 2
 
         self.recording = False
-        self.dataindex = 0
+        try:
+            with open('index.txt', 'r') as f:
+                self.dataindex = int(f.read())
+        except FileNotFoundError:
+            self.dataindex = 0
         self.data_dir = "./mydata/raw"
 
         load_default_map_button = tk.Button(
@@ -811,6 +815,8 @@ class Simulator(tk.Tk):
             second_column = df['distance'].transpose()
             second_column.to_csv(f'./mydata/raw/data{self.dataindex}.csv', index=False, header=False)
             self.dataindex = self.dataindex + 1
+            with open('index.txt', 'w') as f:
+                f.write(str(self.dataindex))
 
     # def model_control(self):
     #     start_time = time.time()
