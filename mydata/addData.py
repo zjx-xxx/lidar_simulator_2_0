@@ -3,7 +3,7 @@ import re
 import pandas as pd
 
 # 获取当前目录下的 mydata 子目录的路径
-mydata_dir = os.path.join(os.getcwd(), 'mydata')
+mydata_dir = os.path.join(os.getcwd(), 'labeled')
 # 获取 mydata 子目录中的所有文件
 if os.path.exists(mydata_dir):
     file_names = os.listdir(mydata_dir)  # 获取 mydata 子目录中的所有文件名
@@ -43,19 +43,21 @@ merged_data.to_csv('./Data.csv', header=False, index=False)
 Test = merged_data.sample(frac=0.1, random_state=42)
 Train = merged_data.drop(Test.index)
 
-# 提取最后一列数据作为 Y_train
-Y_train = Train.iloc[:, -2:]
-# 提取前面所有的列作为 X_train
+Y_type_train = Train.iloc[:, -2:-1]
 X_train = Train.iloc[:, :-2]
-Y_test = Test.iloc[:, -2:]
+Y_type_test = Test.iloc[:, -2:-1]
+Y_dir_train = Train.iloc[:, -1:]
+Y_dir_test = Test.iloc[:, -1:]
 X_test = Test.iloc[:, :-2]
 
 
 # 保存 X_train、Y_train、X_test 和 Y_test 到新的 CSV 文件
 X_train.to_csv('./X_train.csv', header=False, index=False)
-Y_train.to_csv('./Y_train.csv', header=False, index=False)
+Y_type_train.to_csv('./type/Y_train.csv', header=False, index=False)
 X_test.to_csv('./X_test.csv', header=False, index=False)
-Y_test.to_csv('./Y_test.csv', header=False, index=False)
+Y_type_test.to_csv('./type/Y_test.csv', header=False, index=False)
+Y_dir_train.to_csv('./direction/Y_train.csv', header=False, index=False)
+Y_dir_test.to_csv('./direction/Y_test.csv', header=False, index=False)
 print("X_train、Y_train、X_test 和 Y_test 已保存。")
 
 import datetime

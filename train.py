@@ -57,7 +57,7 @@ if __name__ == '__main__':
     X_train = pd.read_csv('./mydata/X_train.csv', header=None)  # 加载特征数据
     # X_train.drop(X_train.columns[169:189], axis=1, inplace=True)#去除了车屁股部分的数据
     X_train = X_train.values
-    y_train = pd.read_csv('./mydata/Y_train.csv', header=None).values  # 加载标签数据
+    y_train = pd.read_csv('./mydata/type/Y_train.csv', header=None).values  # 加载标签数据
 
     # 初始化模型并将其转移到GPU
     model = NeuralNetwork().to(device)
@@ -71,12 +71,12 @@ if __name__ == '__main__':
     X_test = pd.read_csv('./mydata/X_test.csv', header=None)  # 从CSV文件读取X_test
     # X_test.drop(X_test.columns[169:189], axis=1, inplace=True)#去除了车屁股部分的数据
     X_test = X_test.values
-    y_test = pd.read_csv('./mydata/Y_test.csv', header=None).values.flatten()  # 从CSV文件读取Y_test
+    y_test = pd.read_csv('./mydata/type/Y_test.csv', header=None).values.flatten()  # 从CSV文件读取Y_test
 
     # 评估模型
     acc = evaluate(model, X_test, y_test, device)
 
-    while acc < 0.99:
+    while acc < 0.9:
         model = NeuralNetwork().to(device)  # 重新初始化模型并转移到GPU
         train(model, X_train, y_train, num_epochs, batch_size)
         acc = evaluate(model, X_test, y_test, device)

@@ -27,7 +27,7 @@ if __name__ == '__main__':
 
     # 读取X_test 和 Y_test
     X_test = pd.read_csv('./mydata/X_test.csv', header=None).values  # 从CSV文件读取X_test
-    y_test = pd.read_csv('./mydata/Y_test.csv', header=None).values.flatten()  # 从CSV文件读取Y_test
+    y_test = pd.read_csv('./mydata/type/Y_test.csv', header=None).values.flatten()  # 从CSV文件读取Y_test
 
     # 初始化模型
     model = NeuralNetwork()
