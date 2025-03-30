@@ -44,11 +44,11 @@ Test = merged_data.sample(frac=0.1, random_state=42)
 Train = merged_data.drop(Test.index)
 
 # 提取最后一列数据作为 Y_train
-Y_train = Train.iloc[:, -1]
+Y_train = Train.iloc[:, -2:]
 # 提取前面所有的列作为 X_train
-X_train = Train.iloc[:, :-1]
-Y_test = Test.iloc[:, -1]
-X_test = Test.iloc[:, :-1]
+X_train = Train.iloc[:, :-2]
+Y_test = Test.iloc[:, -2:]
+X_test = Test.iloc[:, :-2]
 
 
 # 保存 X_train、Y_train、X_test 和 Y_test 到新的 CSV 文件
