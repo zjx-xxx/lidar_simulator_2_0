@@ -140,6 +140,7 @@ class Simulator(tk.Tk):
 
         self.recording = False
         self.dataindex = 0
+        self.data_dir = "./mydata/raw"
 
         load_default_map_button = tk.Button(
             button_frame,
@@ -221,6 +222,17 @@ class Simulator(tk.Tk):
             font=("等线", 12, "bold")
         )
         toggle_serial_button.pack(side=tk.TOP, fill=tk.BOTH, pady=5)
+
+        toggle_clear_data_button = tk.Button(
+            button_frame,
+            text="清除数据",
+            command=self.toggle_clear_data,
+            width=button_width,
+            height=button_height,
+            font=("等线", 12, "bold")
+        )
+        toggle_clear_data_button.pack(side=tk.TOP, fill=tk.BOTH, pady=5)
+
 
         toggle_auto_control_button = tk.Button(
             button_frame,
@@ -797,7 +809,7 @@ class Simulator(tk.Tk):
         df = pd.DataFrame(self.lidar_result, columns=['degree', 'distance'])
         if(len(df) != 0):
             second_column = df['distance'].transpose()
-            second_column.to_csv(f'./mydata/data{self.dataindex}.csv', index=False, header=False)
+            second_column.to_csv(f'./mydata/raw/data{self.dataindex}.csv', index=False, header=False)
             self.dataindex = self.dataindex + 1
 
     # def model_control(self):
@@ -1069,6 +1081,40 @@ class Simulator(tk.Tk):
         self.timestamp = time.time()
         self.collision_count = 0
         self.log("开启自动控制")
+
+    def toggle_clear_data(self):
+        if self.on_mouse_control:
+            self.log("请关闭鼠标跟随")
+            return
+        if not os.listdir(self.data_dir):
+            popup = tk.Toplevel(self)  # 创建一个新的窗口
+            popup.title("清除数据")
+            popup.geometry("200x100")
+
+            label = tk.Label(popup, text="文件夹已经为空")
+            label.pack(pady=10)
+
+            close_button = tk.Button(popup, text="关闭", command=popup.destroy)
+            close_button.pack()
+        else:
+            popup = tk.Toplevel(self)  # 创建一个新的窗口
+            popup.title("清除数据")
+            popup.geometry("200x100")
+
+            label = tk.Label(popup, text="您确定要删除文件夹中的所有数据吗？")
+            label.pack(pady=10)
+
+            enter_button = tk.Button(popup, text="确认", command=self.clear_data)
+            enter_button.pack()
+
+    def clear_data(self):
+        directory = self.data_dir
+        for filename in os.listdir(directory):
+            file_path = os.path.join(directory, filename)
+            if os.path.isfile(file_path):  # 仅删除文件，不删除子目录
+                os.remove(file_path)
+        self.log("已经删除所有数据")
+        return
 
     def close_auto_control(self):
         self.in_auto_control = False
