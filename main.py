@@ -9,11 +9,15 @@ import numpy as np
 import tkinter as tk
 from PIL import Image, ImageTk
 from tkinter import ttk, messagebox, filedialog
+
+from sympy import false
+
 from predict import  predict
 import torch
 from model import NeuralNetwork
 import numpy as np
 import time
+import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
@@ -133,6 +137,9 @@ class Simulator(tk.Tk):
 
         button_width = 20
         button_height = 2
+
+        self.recording = False
+        self.dataindex = 0
 
         load_default_map_button = tk.Button(
             button_frame,
@@ -701,6 +708,7 @@ class Simulator(tk.Tk):
         self.on_mouse_control = False
         self.simulation_canvas.unbind("<Button-1>")
         #这里需要补充关闭记录
+        self.recording = False
         self.log("关闭鼠标跟随")
 
     def on_key_press(self, event):
@@ -785,6 +793,12 @@ class Simulator(tk.Tk):
         delay_time = self.lidar_scan_time_interval - (end_time - start_time)
         self.after(int(max(delay_time, 0) * 1000), self.lidar_scan)
 
+        df = pd.DataFrame(self.lidar_result, columns=['degree', 'distance'])
+        if(len(df) != 0):
+            second_column = df['distance'].transpose()
+            second_column.to_csv(f'./mydata/data{self.dataindex}.csv', index=False, header=False)
+            self.dataindex = self.dataindex + 1
+
     # def model_control(self):
     #     start_time = time.time()
     #     if self.in_auto_control:
@@ -807,7 +821,6 @@ class Simulator(tk.Tk):
         self.simulation_canvas.bind("<Button-1>", self.close_mouse_control_handle)
         self.follow_mouse()
 
-
     def follow_mouse(self):
         if self.on_mouse_control:
             x_mouse, y_mouse = self.winfo_pointerx(), self.winfo_pointery()
@@ -817,6 +830,7 @@ class Simulator(tk.Tk):
             y_mouse -= widget_y
             # self.log(f"{x_mouse}, {y_mouse}")
             #这里需要补充开始记录
+            self.recording = True
             x_car, y_car = self.car_pose[0, 0], self.car_pose[1, 0]
 
             theta_car = self.car_pose[2, 0]
