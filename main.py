@@ -1110,9 +1110,10 @@ class Simulator(tk.Tk):
     def clear_data(self):
         directory = self.data_dir
         for filename in os.listdir(directory):
-            file_path = os.path.join(directory, filename)
-            if os.path.isfile(file_path):  # 仅删除文件，不删除子目录
-                os.remove(file_path)
+            if filename != "raw.md":
+                file_path = os.path.join(directory, filename)
+                if os.path.isfile(file_path):  # 仅删除文件，不删除子目录
+                    os.remove(file_path)
         self.log("已经删除所有数据")
         return
 
