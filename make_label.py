@@ -87,7 +87,7 @@ def draw_lidar_from_csv(csv_files):
                 data = pd.read_csv(f'./mydata/raw/{csv_file}', header=None).values.flatten()
                 data_with_labels = np.append(data, [label1_value, label2_value])
                 df = pd.DataFrame(data_with_labels)
-                df.to_csv(f'./mydata/labeled/{csv_file}', index=False, header=False)
+                df.to_csv(f'./mydata/labeled/regression/{csv_file}', index=False, header=False)
                 os.remove(f'./mydata/raw/{csv_file}')
                 print(f"标签 {label1_value}, {label2_value} 已保存到 {csv_file}")
             except Exception as e:
@@ -109,7 +109,7 @@ def draw_lidar_from_csv(csv_files):
 # 获取所有文件并开始循环
 csv_files = []
 raw_data_dir = os.path.join(os.getcwd(), 'mydata/raw')
-labeled_data_dir = os.path.join(os.getcwd(), 'mydata/labeled')
+labeled_data_dir = os.path.join(os.getcwd(), 'mydata/labeled/regression')
 
 if os.path.exists(raw_data_dir):
     file_names = os.listdir(raw_data_dir)
