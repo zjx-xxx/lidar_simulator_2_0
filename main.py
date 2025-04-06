@@ -716,8 +716,8 @@ class Simulator(tk.Tk):
         # self.on_mouse_control = True
         self.log("打开鼠标跟随")
         # 在 __init__ 里初始化 PID 控制器
-        self.steering_pid = PID(Kp=2.0, Ki=0.1, Kd=0.5, output_limit=30)
-        self.speed_pid = PID(Kp=2.0, Ki=0.15, Kd=0.8, output_limit=10)
+        self.steering_pid = PID(Kp=5.0, Ki=0.1, Kd=0.5, output_limit=30)
+        self.speed_pid = PID(Kp=3.0, Ki=0.15, Kd=0.8, output_limit=10)
         self.simulation_canvas.bind("<Button-1>", self.mouse_control)
 
 
