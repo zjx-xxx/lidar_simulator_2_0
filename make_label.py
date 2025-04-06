@@ -118,8 +118,21 @@ else:
     print(f"目录 {raw_data_dir} 不存在！")
     file_names = []
 
-pattern = r'^data\d+\.csv$'
-matching_files = [file for file in file_names if re.match(pattern, file)]
+pattern = r'^data(\d+)\.csv$'
+
+# 提取匹配的文件名，并按数字部分排序
+matching_files = []
+for file in file_names:
+    match = re.match(pattern, file)
+    if match:
+        file_index = int(match.group(1))
+        matching_files.append((file_index, file))
+
+# 按照数字 index 排序
+matching_files.sort()
+
+# 只取排序后的文件名
+csv_files = [file for _, file in matching_files]
 for file_name in matching_files:
     if os.path.exists(f'./mydata/raw/{file_name}'):
         csv_files.append(file_name)
