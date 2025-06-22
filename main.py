@@ -317,7 +317,7 @@ class Simulator(tk.Tk):
         self.in_set_car_pose = False
         self.data = np.zeros((1, 360))
         self.model = NeuralNetwork()
-        self.model.load_state_dict(torch.load('./model/model'))
+        self.model.load_state_dict(torch.load('./model/model', weights_only=True))
 
         self.key_state = {'w': False, 's': False, 'a': False, 'd': False}
         self.key_press_time = {}
