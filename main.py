@@ -116,10 +116,10 @@ class Simulator(tk.Tk):
         )
         self.car_control_velocity_label.grid(row=1, column=0, pady=5)
 
-        # self.road_label = tk.Label(
-        #     log_text_frame, text=f"路径类型: {0:>5d}", font=("等线", 12, "bold")
-        # )
-        # self.road_label.grid(row=1, column=0, pady=5)
+        self.road_label = tk.Label(
+            log_text_frame, text=f"路径类型: {0:>5d}", font=("等线", 12, "bold")
+        )
+        self.road_label.grid(row=1, column=0, pady=5)
 
         self.car_control_steering_label = tk.Label(
             log_text_frame, text=f"转角: {0:>5d}", font=("等线", 12, "bold")
@@ -303,8 +303,8 @@ class Simulator(tk.Tk):
         self.in_timing = False
         self.in_set_car_pose = False
         self.data = np.zeros((1, 360))
-        # self.model = NeuralNetwork()
-        # self.model.load_state_dict(torch.load('./model/model'))
+        self.model = NeuralNetwork()
+        self.model.load_state_dict(torch.load('./model/model'))
 
         self.key_state = {'w': False, 's': False, 'a': False, 'd': False}
         self.key_press_time = {}
@@ -773,22 +773,22 @@ class Simulator(tk.Tk):
         self.car_control_value[0, 0] = np.maximum(np.minimum(self.car_control_value[0, 0], 200), -200)
         self.car_control_value[1, 0] = np.maximum(np.minimum(self.car_control_value[1, 0], 30), -30)
 
-        # # 初始化模型
-        # model = NeuralNetwork()
-        #
-        # # 加载已训练好的模型
-        # model.load_state_dict(torch.load('./model/model'))
-        #
-        # # 提取第二列并转变为一行
-        # second_column_as_row = [row[1] for row in self.lidar_result]
-        #
-        # # 进行预测
-        # if (len(second_column_as_row)==360):
-        #     X = [second_column_as_row]
-        #     self.road = predict(model, X)
+        # 初始化模型
+        model = NeuralNetwork()
+
+        # 加载已训练好的模型
+        model.load_state_dict(torch.load('./model/model'))
+
+        # 提取第二列并转变为一行
+        second_column_as_row = [row[1] for row in self.lidar_result]
+
+        # 进行预测
+        if (len(second_column_as_row)==360):
+            X = [second_column_as_row]
+            self.road = predict(model, X)
 
         self.car_control_velocity_label.config(text=f"速度: {int(self.car_control_value[0, 0]):>5d}")
-        # self.road_label.config(text=f"路径类型: {self.road:>5d}")
+        self.road_label.config(text=f"路径类型: {self.road:>5d}")
         self.car_control_steering_label.config(text=f"转角: {int(self.car_control_value[1, 0]):>5d}")
 
     def lidar_scan(self):
