@@ -268,6 +268,19 @@ class Simulator(tk.Tk):
         )
         exit_button.pack(side=tk.TOP, fill=tk.BOTH, pady=5)
 
+        self.start_dataindex = None
+        self.end_dataindex = None
+
+        delete_mouse_data_button = tk.Button(
+            button_frame,
+            text="撤销上次鼠标记录",
+            command=self.delete_last_mouse_data,
+            width=button_width,
+            height=button_height,
+            font=("等线", 12, "bold")
+        )
+        delete_mouse_data_button.pack(side=tk.TOP, fill=tk.BOTH, pady=5)
+
         serial_port_label = tk.Label(serial_frame, text="端口号", font=("等线", 12, "bold"))
         serial_port_label.pack(side=tk.TOP, fill=tk.X, pady=5)
         self.serial_port_val = tk.StringVar()
@@ -714,11 +727,26 @@ class Simulator(tk.Tk):
             self.log("请先关闭键盘控制")
             return
         # self.on_mouse_control = True
+        self.start_dataindex = self.dataindex  #记录起始索引
         self.log("打开鼠标跟随")
         # 在 __init__ 里初始化 PID 控制器
         self.steering_pid = PID(Kp=5.0, Ki=0.1, Kd=0.5, output_limit=30)
         self.speed_pid = PID(Kp=3.0, Ki=0.15, Kd=0.8, output_limit=10)
         self.simulation_canvas.bind("<Button-1>", self.mouse_control)
+
+    def delete_last_mouse_data(self):
+        if self.start_dataindex is None or self.end_dataindex is None:
+            self.log("没有找到可以删除的鼠标记录段")
+            return
+        deleted = 0
+        for i in range(self.start_dataindex, self.end_dataindex):
+            file_path = f"./mydata/raw/data{i}.csv"
+            if os.path.exists(file_path):
+                os.remove(file_path)
+                deleted += 1
+        self.log(f"已删除 {deleted} 个文件（data{self.start_dataindex} 到 data{self.end_dataindex - 1}）")
+        self.start_dataindex = None
+        self.end_dataindex = None
 
 
     def close_mouse_control(self):
@@ -726,7 +754,8 @@ class Simulator(tk.Tk):
         self.simulation_canvas.unbind("<Button-1>")
         #这里需要补充关闭记录
         self.recording = False
-        self.log("关闭鼠标跟随")
+        self.end_dataindex = self.dataindex  # 记录结束索引
+        self.log("关闭鼠标跟随，数据段索引 {} 到 {}".format(self.start_dataindex, self.end_dataindex))
 
     def on_key_press(self, event):
         key = event.keysym.lower()
