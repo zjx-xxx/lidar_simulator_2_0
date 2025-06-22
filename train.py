@@ -12,44 +12,42 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def train(model, X_train, y_train, num_epochs=10, batch_size=32, learning_rate=0.001):
-    # 转换为torch张量并将其转移到GPU上
     print(f'Training on {device}')
     X_train_tensor = torch.tensor(X_train, dtype=torch.float32).to(device)
     y_train_tensor = torch.tensor(y_train, dtype=torch.long).to(device)
+    y_train_tensor = y_train_tensor.squeeze()
 
-    # 确保 y_train_tensor 是 1D 张量
-    y_train_tensor = y_train_tensor.squeeze()  # 将 y_train_tensor 转为 1D 张量
-
-    # 创建训练数据集并使用 DataLoader 进行批处理
     train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
-    # 定义损失函数和优化器
-    criterion = nn.CrossEntropyLoss()  # 交叉熵损失
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)  # Adam优化器
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
-    # 训练模型
     for epoch in tqdm(range(num_epochs), desc="Training Progress"):
         model.train()
+        running_loss = 0.0
+        correct = 0
+        total = 0
 
-        # 遍历每个小批次
         for batch_idx, (data, target) in enumerate(train_loader):
-            # 梯度清零
             optimizer.zero_grad()
-
-            # 前向传播
             outputs = model(data)
-
-            # 计算损失
             loss = criterion(outputs, target)
-
-            # 反向传播
             loss.backward()
-
-            # 更新参数
             optimizer.step()
 
-        # print(f'Epoch [{epoch + 1}/{num_epochs}], Loss: {loss.item():.4f}')
+            # 统计损失
+            running_loss += loss.item()
+
+            # 计算 accuracy
+            _, predicted = torch.max(outputs, 1)  # 获取最大概率的类别
+            correct += (predicted == target).sum().item()
+            total += target.size(0)
+
+        epoch_loss = running_loss / len(train_loader)
+        epoch_acc = correct / total
+
+        print(f'Epoch [{epoch + 1}/{num_epochs}] Loss: {epoch_loss:.4f} | Accuracy: {epoch_acc:.4f}')
 
 
 if __name__ == '__main__':
@@ -62,7 +60,7 @@ if __name__ == '__main__':
     # 初始化模型并将其转移到GPU
     model = NeuralNetwork().to(device)
 
-    num_epochs = 500
+    num_epochs = 80
     batch_size = 64
     # 训练模型
     train(model, X_train, y_train, num_epochs, batch_size)
@@ -76,10 +74,10 @@ if __name__ == '__main__':
     # 评估模型
     acc = evaluate(model, X_test, y_test, device)
 
-    while acc < 0.85:
-        model = NeuralNetwork().to(device)  # 重新初始化模型并转移到GPU
-        train(model, X_train, y_train, num_epochs, batch_size)
-        acc = evaluate(model, X_test, y_test, device)
+    # while acc < 0.85:
+    model = NeuralNetwork().to(device)  # 重新初始化模型并转移到GPU
+    train(model, X_train, y_train, num_epochs, batch_size)
+    # acc = evaluate(model, X_test, y_test, device)
 
     # 保存训练好的模型
     torch.save(model.state_dict(), f'./model/model_{acc * 100:.2f}acc')

@@ -806,7 +806,8 @@ class Simulator(tk.Tk):
         model = NeuralNetwork()
 
         # 加载已训练好的模型
-        model.load_state_dict(torch.load('./model/model'))
+        # model.load_state_dict(torch.load('./model/model'))
+        model.load_state_dict(torch.load('./model/model', weights_only=True))
 
         # 提取第二列并转变为一行
         second_column_as_row = [row[1] for row in self.lidar_result]
