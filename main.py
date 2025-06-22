@@ -774,7 +774,7 @@ class Simulator(tk.Tk):
         self.car_control_value[1, 0] = np.maximum(np.minimum(self.car_control_value[1, 0], 30), -30)
 
         # 初始化模型
-        model = NeuralNetwork()
+        # model = NeuralNetwork()
 
         # 加载已训练好的模型
         # model.load_state_dict(torch.load('./model/model'))

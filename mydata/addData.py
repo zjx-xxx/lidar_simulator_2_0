@@ -67,12 +67,12 @@ Test = merged_data.sample(frac=0.1, random_state=42)
 Train = merged_data.drop(Test.index)
 
 # 拆分数据
-Y_type_train = Train.iloc[:, -2:-1]
-Y_dir_train = Train.iloc[:, -1:]
+Y_type_train = Train.iloc[:, -1:]
+Y_dir_train = Train.iloc[:, -2:-1]
 X_train = Train.iloc[:, :-2]
 
-Y_type_test = Test.iloc[:, -2:-1]
-Y_dir_test = Test.iloc[:, -1:]
+Y_type_test = Test.iloc[:, -1:]
+Y_dir_test = Test.iloc[:, -2:-1]
 X_test = Test.iloc[:, :-2]
 
 # 保存数据集
