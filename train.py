@@ -47,7 +47,7 @@ def train(model, X_train, y_train, num_epochs=10, batch_size=32, learning_rate=0
         epoch_loss = running_loss / len(train_loader)
         epoch_acc = correct / total
 
-        print(f'Epoch [{epoch + 1}/{num_epochs}] Loss: {epoch_loss:.4f} | Accuracy: {epoch_acc:.4f}')
+        # print(f'Epoch [{epoch + 1}/{num_epochs}] Loss: {epoch_loss:.4f} | Accuracy: {epoch_acc:.4f}')
 
 
 if __name__ == '__main__':
@@ -75,9 +75,9 @@ if __name__ == '__main__':
     acc = evaluate(model, X_test, y_test, device)
 
     # while acc < 0.85:
-    model = NeuralNetwork().to(device)  # 重新初始化模型并转移到GPU
-    train(model, X_train, y_train, num_epochs, batch_size)
-    # acc = evaluate(model, X_test, y_test, device)
+    #     model = NeuralNetwork().to(device)  # 重新初始化模型并转移到GPU
+    #     train(model, X_train, y_train, num_epochs, batch_size)
+    #     acc = evaluate(model, X_test, y_test, device)
 
     # 保存训练好的模型
     torch.save(model.state_dict(), f'./model/model_{acc * 100:.2f}acc')
