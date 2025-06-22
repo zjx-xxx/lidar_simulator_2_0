@@ -809,10 +809,13 @@ class Simulator(tk.Tk):
         end_time = time.time()
         delay_time = self.lidar_scan_time_interval - (end_time - start_time)
         self.after(int(max(delay_time, 0) * 1000), self.lidar_scan)
+        # self.lidar_result.append(self.car_control_value[1,0])
 
         df = pd.DataFrame(self.lidar_result, columns=['degree', 'distance'])
-        if(len(df) != 0):
+        if(len(df) != 0 and self.recording):
             second_column = df['distance'].transpose()
+            df_t = pd.Series(int(self.car_control_value[1, 0]))
+            second_column = pd.concat([second_column,df_t])
             file_path = f'./mydata/raw/data{self.dataindex}.csv'
             while os.path.exists(file_path):
                 self.dataindex += 1

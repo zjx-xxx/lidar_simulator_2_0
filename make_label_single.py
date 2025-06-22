@@ -55,7 +55,7 @@ def draw_lidar_from_csv(csv_files):
         label_entry.focus_force()
         try:
             data = pd.read_csv(f'./mydata/raw/{csv_file}', header=None).values.flatten()
-            if len(data) != 360:
+            if len(data) != 361:
                 raise ValueError("CSV 文件数据不完整，缺少激光雷达距离值。")
             update_canvas(data)
         except Exception as e:
