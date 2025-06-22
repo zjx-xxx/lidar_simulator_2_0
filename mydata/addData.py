@@ -5,7 +5,7 @@ import shutil
 import datetime
 
 # 文件夹路径
-mydata_dir = os.path.join(os.getcwd(), 'labeled')
+mydata_dir = os.path.join(os.getcwd(), 'labeled/classification')
 
 # 获取文件列表
 if os.path.exists(mydata_dir):

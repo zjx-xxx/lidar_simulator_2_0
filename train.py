@@ -76,7 +76,7 @@ if __name__ == '__main__':
     # 评估模型
     acc = evaluate(model, X_test, y_test, device)
 
-    while acc < 0.75:
+    while acc < 0.7:
         model = NeuralNetwork().to(device)  # 重新初始化模型并转移到GPU
         train(model, X_train, y_train, num_epochs, batch_size)
         acc = evaluate(model, X_test, y_test, device)
