@@ -15,6 +15,7 @@ from sympy import false
 from predict import  predict
 import torch
 from model import NeuralNetwork
+from model_reg import RegressionNetwork
 import numpy as np
 import time
 import pandas as pd
@@ -116,15 +117,21 @@ class Simulator(tk.Tk):
         )
         self.car_control_velocity_label.grid(row=1, column=0, pady=5)
 
+        # 修改UI部分标签布局（路径类型 + 转角预测）
         self.road_label = tk.Label(
-            log_text_frame, text=f"路径类型: {0:>5d}", font=("等线", 12, "bold")
+            log_text_frame, text=f"路径分类预测: 无", font=("等线", 12, "bold")
         )
         self.road_label.grid(row=1, column=0, pady=5)
 
-        self.car_control_steering_label = tk.Label(
-            log_text_frame, text=f"转角: {0:>5d}", font=("等线", 12, "bold")
+        self.angle_label = tk.Label(
+            log_text_frame, text=f"舵机角度预测: 无", font=("等线", 12, "bold")
         )
-        self.car_control_steering_label.grid(row=1, column=1, pady=5)
+        self.angle_label.grid(row=1, column=1, pady=5)
+
+        self.car_control_steering_label = tk.Label(
+            log_text_frame, text=f"实际转角: {0:>5d}", font=("等线", 12, "bold")
+        )
+        self.car_control_steering_label.grid(row=2, column=0, pady=5)
 
         logo_frame = tk.Frame(right_frame)
         logo_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
@@ -358,7 +365,14 @@ class Simulator(tk.Tk):
         # self.serial_write()
         # self.serial_read()
 
+        # 初始化两个模型
+        self.model_cls = NeuralNetwork()
+        self.model_cls.load_state_dict(torch.load('./model/model', weights_only=True))
+        self.model_cls.eval()
 
+        self.model_reg = RegressionNetwork()
+        self.model_reg.load_state_dict(torch.load('./model/model_regression.pth'))
+        self.model_reg.eval()
 
     def update_port_list(self):
         ports = [port.device for port in serial.tools.list_ports.comports()]
@@ -802,24 +816,32 @@ class Simulator(tk.Tk):
         self.car_control_value[0, 0] = np.maximum(np.minimum(self.car_control_value[0, 0], 200), -200)
         self.car_control_value[1, 0] = np.maximum(np.minimum(self.car_control_value[1, 0], 30), -30)
 
-        # 初始化模型
-        model = NeuralNetwork()
-
-        # 加载已训练好的模型
-        # model.load_state_dict(torch.load('./model/model'))
-        model.load_state_dict(torch.load('./model/model', weights_only=True))
-
-        # 提取第二列并转变为一行
+        # 提取第二列距离序列
         second_column_as_row = [row[1] for row in self.lidar_result]
 
-        # 进行预测
-        if (len(second_column_as_row)==360):
-            X = [second_column_as_row]
-            self.road = predict(model, X)
+        # 分类模型预测（路径类型）
+        if len(second_column_as_row) == 360:
+            X_cls = [second_column_as_row]
+            self.road = predict(self.model_cls, X_cls)
 
+        # 回归模型预测（角度）
+        pred_angle = None
+        if len(second_column_as_row) == 360:
+            input_reg = torch.tensor([second_column_as_row + [self.deltatheta]], dtype=torch.float32)
+            with torch.no_grad():
+                pred_angle = self.model_reg(input_reg).item()
+                pred_angle = np.clip(pred_angle, -30, 30)
+                self.car_control_value[1, 0] = pred_angle
+
+        # 更新显示
         self.car_control_velocity_label.config(text=f"速度: {int(self.car_control_value[0, 0]):>5d}")
-        self.road_label.config(text=f"路径类型: {self.road:>5d}")
-        self.car_control_steering_label.config(text=f"转角: {int(self.car_control_value[1, 0]):>5d}")
+        self.road_label.config(text=f"路径分类预测: {self.road}")
+        if pred_angle is not None:
+            self.angle_label.config(text=f"舵机角度预测: {pred_angle:.2f} °")
+        else:
+            self.angle_label.config(text=f"舵机角度预测: 无")
+
+        self.car_control_steering_label.config(text=f"实际转角: {int(self.car_control_value[1, 0]):>5d}")
 
     def lidar_scan(self):
         start_time = time.time()
