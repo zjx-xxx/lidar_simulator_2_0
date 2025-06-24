@@ -102,6 +102,7 @@ class Simulator(tk.Tk):
         log_text_frame.pack(side=tk.TOP, fill=tk.X)
         log_text_frame.grid_columnconfigure(0, weight=1)
         log_text_frame.grid_columnconfigure(1, weight=1)
+
         self.timer_label = tk.Label(
             log_text_frame, text=f"用时: {0:>5d}", font=("等线", 12, "bold")
         )
@@ -117,21 +118,28 @@ class Simulator(tk.Tk):
         )
         self.car_control_velocity_label.grid(row=1, column=0, pady=5)
 
-        # 修改UI部分标签布局（路径类型 + 转角预测）
         self.road_label = tk.Label(
             log_text_frame, text=f"路径分类预测: 无", font=("等线", 12, "bold")
         )
-        self.road_label.grid(row=1, column=0, pady=5)
-
-        self.angle_label = tk.Label(
-            log_text_frame, text=f"舵机角度预测: 无", font=("等线", 12, "bold")
-        )
-        self.angle_label.grid(row=1, column=1, pady=5)
+        self.road_label.grid(row=2, column=0, pady=5)
 
         self.car_control_steering_label = tk.Label(
             log_text_frame, text=f"实际转角: {0:>5d}", font=("等线", 12, "bold")
         )
-        self.car_control_steering_label.grid(row=2, column=0, pady=5)
+        self.car_control_steering_label.grid(row=3, column=0, pady=5)
+
+        self.speed_input_label = tk.Label(
+            log_text_frame, text="自动速度:", font=("等线", 12, "bold")
+        )
+        self.speed_input_label.grid(row=1, column=1, pady=5)
+        self.speed_input = tk.Entry(log_text_frame, font=("等线", 12, "bold"), width=6)
+        self.speed_input.insert(0, "50")
+        self.speed_input.grid(row=1, column=2, pady=5)
+
+        self.predicted_angle_label = tk.Label(
+            log_text_frame, text="预测舵机角度: 无", font=("等线", 12, "bold")
+        )
+        self.predicted_angle_label.grid(row=3, column=1, pady=5)
 
         logo_frame = tk.Frame(right_frame)
         logo_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
@@ -224,16 +232,6 @@ class Simulator(tk.Tk):
 
         toggle_keyboard_control_button.pack(side=tk.TOP, fill=tk.BOTH, pady=5)
 
-        toggle_serial_button = tk.Button(
-            button_frame,
-            text="开启/关闭串口",
-            command=self.toggle_serial,
-            width=button_width,
-            height=button_height,
-            font=("等线", 12, "bold")
-        )
-        toggle_serial_button.pack(side=tk.TOP, fill=tk.BOTH, pady=5)
-
         toggle_clear_data_button = tk.Button(
             button_frame,
             text="清除数据",
@@ -288,18 +286,6 @@ class Simulator(tk.Tk):
         )
         delete_mouse_data_button.pack(side=tk.TOP, fill=tk.BOTH, pady=5)
 
-        serial_port_label = tk.Label(serial_frame, text="端口号", font=("等线", 12, "bold"))
-        serial_port_label.pack(side=tk.TOP, fill=tk.X, pady=5)
-        self.serial_port_val = tk.StringVar()
-        self.serial_port_box = ttk.Combobox(
-            serial_frame,
-            textvariable=self.serial_port_val,
-            state="readonly",
-            font=("等线", 12, "bold"),
-            postcommand=self.update_port_list
-        )
-        self.serial_port_box.pack(side=tk.TOP, fill=tk.X, pady=5)
-
         logo1_image = Image.open(resource_path("data/logo1.png"))
         logo1_image = ImageTk.PhotoImage(logo1_image)
         logo1_label = tk.Label(logo_frame, image=logo1_image)
@@ -337,8 +323,6 @@ class Simulator(tk.Tk):
         self.car_image = Image.open(resource_path("data/car.png")).resize((self.car_size, self.car_size))
         self.car_photo = ImageTk.PhotoImage(self.car_image)
 
-        self.serial = None
-        self.baud_rate = 460800
         self.velocity_command = ""
         self.steering_command = ""
         self.command_state = -1
@@ -347,8 +331,6 @@ class Simulator(tk.Tk):
         self.map_type = 0
         self.simulation_time_interval = 0.02
         self.lidar_scan_time_interval = 0.2
-        self.serial_read_time_interval = 0.001
-        self.serial_write_time_interval = 0.2
         self.time_interval = 0.2
         self.lidar_result = []
 
@@ -359,11 +341,6 @@ class Simulator(tk.Tk):
         self.load_default_map()
         self.update()
         self.lidar_scan()
-        # self.mouse_control()
-        # self.mouse_click()
-        # self.model_control()
-        # self.serial_write()
-        # self.serial_read()
 
         # 初始化两个模型
         self.model_cls = NeuralNetwork()
@@ -374,14 +351,10 @@ class Simulator(tk.Tk):
         self.model_reg.load_state_dict(torch.load('./model/model_regression.pth'))
         self.model_reg.eval()
 
-    def update_port_list(self):
-        ports = [port.device for port in serial.tools.list_ports.comports()]
-        self.serial_port_box["values"] = ports
-        if ports:
-            if not self.serial_port_val.get() or self.serial_port_val.get() not in ports:
-                self.serial_port_box.current(0)
-        else:
-            self.serial_port_val.set("")
+        self.predicted_angle = 0.0
+
+        # 自动控制状态标志初始化
+        self.in_auto_control = False
 
     def log(self, message):
         self.log_text.config(state=tk.NORMAL)
@@ -796,6 +769,28 @@ class Simulator(tk.Tk):
                         self.car_control_value[1, 0] -= press_duration * 30
                     elif key == 'd':
                         self.car_control_value[1, 0] += press_duration * 30
+
+        second_column_as_row = [row[1] for row in self.lidar_result]
+
+        if len(second_column_as_row) == 360:
+            X_cls = [second_column_as_row]
+            self.road = predict(self.model_cls, X_cls)
+
+        if self.in_auto_control and len(second_column_as_row) == 360:
+            input_reg = torch.tensor([second_column_as_row + [self.deltatheta]], dtype=torch.float32)
+            with torch.no_grad():
+                pred_angle = self.model_reg(input_reg).item()
+                pred_angle = np.clip(pred_angle, -30, 30)
+                self.car_control_value[1, 0] = pred_angle
+                self.predicted_angle = pred_angle
+                self.predicted_angle_label.config(text=f"预测舵机角度: {self.predicted_angle:.2f} °")
+
+            try:
+                speed = float(self.speed_input.get())
+            except ValueError:
+                speed = 50.0
+            self.car_control_value[0, 0] = np.clip(speed, -200, 200)
+
         if not self.in_auto_control:
             if self.in_keyboard_control:
                 velocity_decrease_flag = True
@@ -813,34 +808,12 @@ class Simulator(tk.Tk):
             else:
                 self.car_control_value[0, 0] *= 0.95
                 self.car_control_value[1, 0] *= 0.85
+
         self.car_control_value[0, 0] = np.maximum(np.minimum(self.car_control_value[0, 0], 200), -200)
         self.car_control_value[1, 0] = np.maximum(np.minimum(self.car_control_value[1, 0], 30), -30)
 
-        # 提取第二列距离序列
-        second_column_as_row = [row[1] for row in self.lidar_result]
-
-        # 分类模型预测（路径类型）
-        if len(second_column_as_row) == 360:
-            X_cls = [second_column_as_row]
-            self.road = predict(self.model_cls, X_cls)
-
-        # 回归模型预测（角度）
-        pred_angle = None
-        if len(second_column_as_row) == 360:
-            input_reg = torch.tensor([second_column_as_row + [self.deltatheta]], dtype=torch.float32)
-            with torch.no_grad():
-                pred_angle = self.model_reg(input_reg).item()
-                pred_angle = np.clip(pred_angle, -30, 30)
-                self.car_control_value[1, 0] = pred_angle
-
-        # 更新显示
         self.car_control_velocity_label.config(text=f"速度: {int(self.car_control_value[0, 0]):>5d}")
         self.road_label.config(text=f"路径分类预测: {self.road}")
-        if pred_angle is not None:
-            self.angle_label.config(text=f"舵机角度预测: {pred_angle:.2f} °")
-        else:
-            self.angle_label.config(text=f"舵机角度预测: 无")
-
         self.car_control_steering_label.config(text=f"实际转角: {int(self.car_control_value[1, 0]):>5d}")
 
     def lidar_scan(self):
@@ -949,60 +922,6 @@ class Simulator(tk.Tk):
         else:
             self.on_mouse_control = False
 
-
-    # def serial_write(self):##改为python控制
-    #     start_time = time.time()
-    #     if self.in_auto_control:
-    #         for angle, distance in self.lidar_result:
-    #             if self.in_auto_control:
-    #                 message = f"<{angle},{int(distance)};{1 if angle == 359 else 0}>"
-    #                 try:
-    #                     self.serial.write(message.encode())
-    #                     self.serial.flush()
-    #                 except serial.SerialException as e:
-    #                     self.log(f"串口发送错误\n{e}")
-    #     end_time = time.time()
-    #     delay_time = self.serial_write_time_interval - (end_time - start_time)
-    #     self.after(int(max(delay_time, 0) * 1000), self.serial_write)
-    #
-    # def serial_read(self):
-    #     start_time = time.time()
-    #     if self.in_auto_control:
-    #         try:
-    #             if self.serial.in_waiting:
-    #                 c = self.serial.read(1).decode('utf-8')
-    #                 if self.command_state == -1:
-    #                     if c == '(':
-    #                         self.command_state = 0
-    #                 elif self.command_state == 0:
-    #                     if c == ',':
-    #                         try:
-    #                             self.car_control_value[0, 0] = eval(self.velocity_command)#自动控制
-    #                         except SyntaxError or ValueError:
-    #                             pass
-    #                         self.velocity_command = ""
-    #                         self.command_state = 1
-    #                     else:
-    #                         self.velocity_command += c
-    #                 elif self.command_state == 1:
-    #                     if c == ')':
-    #                         try:
-    #                             self.car_control_value[1, 0] = eval(self.steering_command)
-    #                         except SyntaxError or ValueError:
-    #                             pass
-    #                         self.steering_command = ""
-    #                         self.command_state = -1
-    #                     else:
-    #                         self.steering_command += c
-    #         except serial.SerialException as e:
-    #             self.log(f"串口接收错误\n{e}")
-    #             self.velocity_command = ""
-    #             self.steering_command = ""
-    #             self.command_state = -1
-    #     end_time = time.time()
-    #     delay_time = self.serial_read_time_interval - (end_time - start_time)
-    #     self.after(int(max(delay_time, 0) * 1000), self.serial_read)
-
     def lidar_detect(self, x1, y1, x2, y2):
         grid_size = 20
         x1_grid, y1_grid = int(x1 // grid_size), int(y1 // grid_size)
@@ -1091,34 +1010,6 @@ class Simulator(tk.Tk):
                     text_x, text_y, text=f"{distance}", fill="blue"
                 )
 
-    def toggle_serial(self):
-        if self.serial is None:
-            self.open_serial()
-        else:
-            self.close_serial()
-
-    def open_serial(self):
-        if self.serial_port_val.get() == "":
-            self.log("请先选择串口")
-            return
-        else:
-            try:
-                self.serial = serial.Serial(
-                    self.serial_port_val.get(),
-                    self.baud_rate,
-                    timeout=1
-                )
-                self.log(f"成功打开串口 {self.serial_port_val.get()}")
-            except serial.SerialException as e:
-                self.log(f"打开串口 {self.serial_port_val.get()} 失败\n{e}")
-
-    def close_serial(self):
-        self.serial.close()
-        self.log(f"关闭串口 {self.serial.name}")
-        if self.in_auto_control:
-            self.close_auto_control()
-        self.serial = None
-
     def toggle_auto_control(self):
         if self.in_auto_control:
             self.close_auto_control()
@@ -1129,10 +1020,7 @@ class Simulator(tk.Tk):
         if self.in_keyboard_control:
             self.log("请先关闭键盘控制")
             return
-        # if self.serial is None:##你不许读串口
-        #     self.log("请先开启串口")
-        #     return
-        if self.on_keyboard_control:
+        if self.on_mouse_control:
             self.log("请先关闭鼠标控制")
             return
         if self.car is None:
@@ -1140,12 +1028,10 @@ class Simulator(tk.Tk):
             return
         if self.in_map_edit:
             self.close_map_edit()
-        # self.serial.reset_input_buffer()
-        # self.serial.reset_output_buffer()
         self.in_auto_control = True
         self.timestamp = time.time()
         self.collision_count = 0
-        self.log("开启自动控制")
+        self.log("开启自动控制（使用模型预测）")
 
     def toggle_clear_data(self):
         if self.on_mouse_control:
