@@ -1,5 +1,5 @@
 # train_reg.py
-
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -26,7 +26,7 @@ class LidarRegressionDataset(Dataset):
         return x, y
 
 # 回归训练函数
-def train(model, X_train, y_train, num_epochs=1000, batch_size=64, learning_rate=0.001):
+def train(model, X_train, y_train, num_epochs=400, batch_size=64, learning_rate=0.001):
     print(f'Training on {device}')
 
     train_dataset = LidarRegressionDataset(X_train, y_train)
@@ -54,9 +54,18 @@ def train(model, X_train, y_train, num_epochs=1000, batch_size=64, learning_rate
         print(f"Epoch [{epoch + 1}/{num_epochs}] Loss: {epoch_loss:.4f}")
 
 if __name__ == '__main__':
-    # 加载训练数据
-    X_train = pd.read_csv('./mydata/X_train.csv', header=None).values
-    y_train = pd.read_csv('./mydata/direction/Y_train.csv', header=None).values
+    # 读取雷达数据（360维）
+    X_main = pd.read_csv('./mydata/X_train.csv', header=None).values  # shape: [N, 360]
+
+    # 读取路径类型（1维）和转角方向（1维）
+    path_type = pd.read_csv('./mydata/type/Y_train.csv', header=None).values  # shape: [N, 1]
+    turn_direction = pd.read_csv('./mydata/towards/Y_train.csv', header=None).values  # shape: [N, 1]
+
+    # 拼接为新的输入 [N, 362]
+    X_train = np.hstack([X_main, path_type, turn_direction])
+
+    # 加载输出标签
+    y_train = pd.read_csv('./mydata/direction/Y_train.csv', header=None).values  # shape: [N, 1]
 
     # 初始化模型
     model = RegressionNetwork().to(device)

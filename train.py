@@ -74,8 +74,7 @@ if __name__ == '__main__':
     # 初始化模型
     model = NeuralNetwork().to(device)
 
-    # 设置训练参数
-    num_epochs = 1000
+    num_epochs = 100
     batch_size = 64
 
     # 训练模型
@@ -88,12 +87,11 @@ if __name__ == '__main__':
     # 测试评估
     acc = evaluate(model, X_test, y_test, device)
 
-    # # while acc < 0.75:
-    # print("Accuracy < 0.75, retraining...")
-    # model = NeuralNetwork().to(device)
-    # train(model, X_train, y_train, num_epochs, batch_size)
-    # acc = evaluate(model, X_test, y_test, device)
+    while acc < 0.82:
+        model = NeuralNetwork().to(device)  # 重新初始化模型并转移到GPU
+        train(model, X_train, y_train, num_epochs, batch_size)
+        acc = evaluate(model, X_test, y_test, device)
 
-    # 保存模型
+    # 保存训练好的模型
     torch.save(model.state_dict(), f'./model/model_{acc * 100:.2f}acc')
     torch.save(model.state_dict(), './model/model')

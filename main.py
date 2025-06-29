@@ -33,7 +33,7 @@ def resource_path(relative_path):
 
 #PID控制器
 class PID:
-    def __init__(self, Kp, Ki, Kd, output_limit=None, integral_limit=None):
+    def __init__(self, Kp, Ki, Kd, output_limit=None, integral_limit=None, alpha=1.2, nonlinear=True):
         self.Kp = Kp
         self.Ki = Ki
         self.Kd = Kd
@@ -42,23 +42,31 @@ class PID:
         self.last_time = time.time()
         self.output_limit = output_limit
         self.integral_limit = integral_limit
+        self.alpha = alpha  # 非线性因子，alpha > 1 表示更强调大误差
+        self.nonlinear = nonlinear  # 是否使用非线性比例项
 
     def compute(self, error):
         current_time = time.time()
-        dt = current_time - self.last_time  # 计算时间间隔
-        if dt == 0:  # 避免除零错误
+        dt = current_time - self.last_time
+        if dt == 0:
             dt = 1e-6
 
-        self.integral += error * dt  # 积分项累积
+        self.integral += error * dt
         if self.integral_limit:
-            self.integral = np.clip(self.integral, -self.integral_limit, self.integral_limit)  # 限制积分项
+            self.integral = np.clip(self.integral, -self.integral_limit, self.integral_limit)
 
-        derivative = (error - self.prev_error) / dt  # 计算微分项
+        derivative = (error - self.prev_error) / dt
 
-        output = self.Kp * error + self.Ki * self.integral + self.Kd * derivative  # PID 公式
+        # 非线性比例项：sign(error) * |error|^alpha
+        if self.nonlinear:
+            proportional = self.Kp * np.sign(error) * (abs(error) ** self.alpha)
+        else:
+            proportional = self.Kp * error
+
+        output = proportional + self.Ki * self.integral + self.Kd * derivative
 
         if self.output_limit:
-            output = np.clip(output, -self.output_limit, self.output_limit)  # 限制输出，防止过大
+            output = np.clip(output, -self.output_limit, self.output_limit)
 
         self.prev_error = error
         self.last_time = current_time
@@ -327,6 +335,7 @@ class Simulator(tk.Tk):
         self.steering_command = ""
         self.command_state = -1
         self.deltatheta = 0
+        self.towards = 0
 
         self.map_type = 0
         self.simulation_time_interval = 0.02
@@ -695,11 +704,20 @@ class Simulator(tk.Tk):
         self.bind("<KeyRelease>", self.on_key_release)
         self.log("开启键盘控制")
 
+        # 🔧 新增
+        self.recording = True
+        self.start_dataindex = self.dataindex
+
     def close_keyboard_control(self):
         self.in_keyboard_control = False
         self.simulation_canvas.unbind("<KeyPress>")
         self.simulation_canvas.unbind("<KeyRelease>")
         self.log("关闭键盘控制")
+
+        # 🔧 新增
+        self.recording = False
+        self.end_dataindex = self.dataindex
+        self.log("键盘记录完成，数据段索引 {} 到 {}".format(self.start_dataindex, self.end_dataindex))
 
     def open_mouse_control(self):
         if self.in_auto_control:
@@ -770,6 +788,13 @@ class Simulator(tk.Tk):
                     elif key == 'd':
                         self.car_control_value[1, 0] += press_duration * 30
 
+                # ✅ 新增速度限制逻辑
+                try:
+                    max_speed = float(self.speed_input.get())
+                except ValueError:
+                    max_speed = 50.0  # 默认值
+                self.car_control_value[0, 0] = np.clip(self.car_control_value[0, 0], -max_speed, max_speed)
+
         second_column_as_row = [row[1] for row in self.lidar_result]
 
         if len(second_column_as_row) == 360:
@@ -777,7 +802,13 @@ class Simulator(tk.Tk):
             self.road = predict(self.model_cls, X_cls)
 
         if self.in_auto_control and len(second_column_as_row) == 360:
-            input_reg = torch.tensor([second_column_as_row + [self.deltatheta]], dtype=torch.float32)
+            # if self.deltatheta > 5:
+            #     self.towards = 2
+            # elif self.deltatheta < -5:
+            #     self.towards = 1
+            # else:
+            #     self.towards = 0
+            input_reg = torch.tensor([second_column_as_row + [self.road] + [2]], dtype=torch.float32)
             with torch.no_grad():
                 pred_angle = self.model_reg(input_reg).item()
                 pred_angle = np.clip(pred_angle, -30, 30)
@@ -849,21 +880,6 @@ class Simulator(tk.Tk):
             self.dataindex = self.dataindex + 1
             with open('index.txt', 'w') as f:
                 f.write(str(self.dataindex))
-
-    # def model_control(self):
-    #     start_time = time.time()
-    #     if self.in_auto_control:
-    #         i = 0
-    #         for _, distance in self.lidar_result:
-    #             self.data[0, i] = distance
-    #             i = i + 1
-    #         speed, angle = car_control(self.data)
-    #         # speed, angle = predict(self.model, self.data)
-    #         self.car_control_value[0, 0] = speed
-    #         self.car_control_value[1, 0] = angle
-    #     end_time = time.time()
-    #     delay_time = self.time_interval - (end_time - start_time)
-    #     self.after(int(max(delay_time, 0) * 1000), self.model_control)
 
     def close_mouse_control_handle(self, event):
         self.close_mouse_control()
