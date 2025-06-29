@@ -15,13 +15,13 @@ class RegressionNetwork(nn.Module):
 
         self.fc = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(32 * 180, 64),  # 改成5792
+            nn.Linear(32 * 181, 64),  # 改成5792
             nn.ReLU(),
             nn.Linear(64, 1)
         )
 
     def forward(self, x):
         x = x.unsqueeze(1)  # 把输入扩展成 [B, 1, 362]
-        x = self.conv(x)    # 输出 [B, 32, 180]
+        x = self.conv(x)    # 输出 [B, 32, 181]
         x = self.fc(x)      # 输出 [B, 1]
         return x.squeeze(1) # 返回 [B]

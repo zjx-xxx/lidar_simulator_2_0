@@ -3,6 +3,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torch.nn.functional as F
 import pandas as pd
 from model_reg import RegressionNetwork
 from torch.utils.data import DataLoader, Dataset
@@ -10,6 +11,17 @@ from tqdm import tqdm
 
 # CUDA 检查
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+def weighted_mse_loss(pred, target, base_weight=1.0, angle_weight=10.0):
+    """
+    给转角不为0的数据一个更高的权重，用于处理数据不平衡。
+    - base_weight: 所有样本的基础权重
+    - angle_weight: 与角度大小相关的额外权重
+    """
+    # 权重 = 1 + angle_weight * abs(真实角度)
+    weights = base_weight + angle_weight * torch.abs(target)
+    loss = weights * (pred - target) ** 2
+    return loss.mean()
 
 # 回归数据集（无分类 augment）
 class LidarRegressionDataset(Dataset):
@@ -26,13 +38,13 @@ class LidarRegressionDataset(Dataset):
         return x, y
 
 # 回归训练函数
-def train(model, X_train, y_train, num_epochs=400, batch_size=64, learning_rate=0.001):
+def train(model, X_train, y_train, num_epochs=500, batch_size=64, learning_rate=0.001):
     print(f'Training on {device}')
 
     train_dataset = LidarRegressionDataset(X_train, y_train)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
-    criterion = nn.MSELoss()
+    # criterion = nn.MSELoss()使用加权时无需criterion
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
     for epoch in tqdm(range(num_epochs), desc="Training Progress"):
@@ -44,7 +56,8 @@ def train(model, X_train, y_train, num_epochs=400, batch_size=64, learning_rate=
 
             optimizer.zero_grad()
             outputs = model(data)  # 输出 shape: [B]
-            loss = criterion(outputs, target)
+            # loss = criterion(outputs, target)
+            loss = weighted_mse_loss(outputs, target)#加权损失函数
             loss.backward()
             optimizer.step()
 

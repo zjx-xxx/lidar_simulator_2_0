@@ -13,12 +13,11 @@ def clean_and_transpose_single_column(df):
     label_type = str(row[-2])
     label_towards = str(row[-1])
 
-    # 清洗三个标签，只保留第一个数字，找不到设为0
+    # 清洗两个个标签，只保留第一个数字，找不到设为0
     def extract_label(val):
         match = re.search(r'[0-9]', val)
         return int(match.group(0)) if match else 0
 
-    row[-3] = extract_label(label_dir)
     row[-2] = extract_label(label_type)
     row[-1] = extract_label(label_towards)
 
@@ -50,6 +49,8 @@ matching_files = sorted(
 
 all_data = []
 
+print(matching_files)
+
 # 加载旧 Data.csv（如果存在）
 if os.path.exists("./Data.csv") and os.path.getsize("./Data.csv") > 0:
     try:
@@ -58,8 +59,13 @@ if os.path.exists("./Data.csv") and os.path.getsize("./Data.csv") > 0:
         print("已加载旧 Data.csv")
     except pd.errors.EmptyDataError:
         print("Data.csv 文件存在但为空，跳过加载")
+elif not os.path.exists("./Data.csv"):
+    # 文件不存在，创建空文件
+    with open("./Data.csv", "w") as f:
+        pass
+    print("未发现 Data.csv，已创建空文件")
 else:
-    print("未发现或未加载旧 Data.csv（文件不存在或为空）")
+    print("Data.csv 文件为空，跳过加载")
 
 # 读取并清洗每个标注文件（应为363行×1列）
 for file_name in matching_files:
