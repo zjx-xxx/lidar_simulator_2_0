@@ -389,7 +389,7 @@ class Simulator(tk.Tk):
 
         # 自动控制状态标志初始化
         self.in_auto_control = False
-
+        self.polyline_following = False
         self.polyline_points = []
         self.polyline_index = 0
         self.drawing_polyline = False
@@ -407,7 +407,7 @@ class Simulator(tk.Tk):
         follow_polyline_button = tk.Button(
             button_frame,
             text="开启折线循迹",
-            command=self.start_polyline_following,
+            command=self.toggle_polyline_following,
             width=button_width,
             height=button_height,
             font=("等线", 12, "bold")
@@ -1019,9 +1019,15 @@ class Simulator(tk.Tk):
                 *self.polyline_points[-2], *self.polyline_points[-1], fill="blue", width=3
             )
 
+    def toggle_polyline_following(self):
+        if self.polyline_following == False:
+            self.start_polyline_following()
+        else:
+            self.close_polyline_following()
+
     def start_polyline_following(self):
+        self.polyline_following = True
         self.polyline_record_start = self.dataindex
-        self.recording = True
         if self.car is None:
             self.log("请先设置小车位置")
             return
@@ -1034,6 +1040,11 @@ class Simulator(tk.Tk):
         self.speed_pid = PID(Kp=3.0, Ki=0.15, Kd=0.8, output_limit=10)
         self.recording = True  # 启动数据记录
         self.follow_polyline()
+
+    def close_polyline_following(self):
+        self.polyline_following = False
+        self.recording = False
+        self.log("关闭折线循迹")
 
     def follow_polyline(self):
         if self.polyline_index >= len(self.polyline_points):
