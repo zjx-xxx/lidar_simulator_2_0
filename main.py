@@ -808,7 +808,7 @@ class Simulator(tk.Tk):
             #     self.towards = 1
             # else:
             #     self.towards = 0
-            input_reg = torch.tensor([second_column_as_row + [self.road] + [2]], dtype=torch.float32)
+            input_reg = torch.tensor([second_column_as_row + [self.road] + [2]], dtype=torch.float32)#2代表右转
             with torch.no_grad():
                 pred_angle = self.model_reg(input_reg).item()
                 pred_angle = np.clip(pred_angle, -30, 30)
