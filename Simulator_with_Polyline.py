@@ -1045,15 +1045,14 @@ class Simulator(tk.Tk):
         self.polyline_following = False
         self.recording = False
         self.log("关闭折线循迹")
+        self.car_control_value[:, 0] = 0
+        self.polyline_record_end = self.dataindex
+        self.log(f"折线循迹结束，记录数据索引：{self.polyline_record_start} 到 {self.polyline_record_end}")
 
     def follow_polyline(self):
         if self.polyline_index >= len(self.polyline_points):
-            self.car_control_value[:, 0] = 0
-            self.recording = False
-            self.polyline_record_end = self.dataindex
-            self.log(f"折线循迹结束，记录数据索引：{self.polyline_record_start} 到 {self.polyline_record_end}")
+            self.close_polyline_following()
             return
-
         # 获取当前位置
         car_x, car_y = self.car_pose[0, 0], self.car_pose[1, 0]
         theta_car = self.car_pose[2, 0]
