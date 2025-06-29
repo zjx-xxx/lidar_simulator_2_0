@@ -15,7 +15,7 @@ class RegressionNetwork(nn.Module):
 
         self.fc = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(32 * 181, 64),  # 改成5792
+            nn.Linear(32 * 180, 64),  # 改成5792
             nn.ReLU(),
             nn.Linear(64, 1)
         )
