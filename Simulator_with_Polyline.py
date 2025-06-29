@@ -30,10 +30,13 @@ def resource_path(relative_path):
         base_path = os.path.abspath(".")
     return os.path.join(base_path, relative_path)
 
+def map_exp(x, factor):
+    return 0.5/(math.exp(- x * factor * x * factor) + 0.5)
+
 
 #PID控制器
 class PID:
-    def __init__(self, Kp, Ki, Kd, output_limit=None, integral_limit=None):
+    def __init__(self, Kp, Ki, Kd, output_limit=None, integral_limit=None, map=0):
         self.Kp = Kp
         self.Ki = Ki
         self.Kd = Kd
@@ -42,6 +45,7 @@ class PID:
         self.last_time = time.time()
         self.output_limit = output_limit
         self.integral_limit = integral_limit
+        self.map = map
 
     def compute(self, error):
         current_time = time.time()
@@ -59,6 +63,9 @@ class PID:
 
         if self.output_limit:
             output = np.clip(output, -self.output_limit, self.output_limit)  # 限制输出，防止过大
+
+        # if self.map:
+        #     output = map_exp(output, 70)
 
         self.prev_error = error
         self.last_time = current_time
@@ -786,7 +793,7 @@ class Simulator(tk.Tk):
         self.start_dataindex = self.dataindex  #记录起始索引
         self.log("打开鼠标跟随")
         # 在 __init__ 里初始化 PID 控制器
-        self.steering_pid = PID(Kp=5.0, Ki=0.1, Kd=0.5, output_limit=30)
+        self.steering_pid = PID(Kp=3.0, Ki=0.2, Kd=0.6, output_limit=30, map=1)
         self.speed_pid = PID(Kp=3.0, Ki=0.15, Kd=0.8, output_limit=10)
         self.simulation_canvas.bind("<Button-1>", self.mouse_control)
 
@@ -1023,7 +1030,7 @@ class Simulator(tk.Tk):
             return
         self.log("开始折线循迹")
         self.polyline_index = 0
-        self.steering_pid = PID(Kp=4.0, Ki=0.1, Kd=0.5, output_limit=30)
+        self.steering_pid = PID(Kp=6.0, Ki=0.1, Kd=0.3, output_limit=30)
         self.speed_pid = PID(Kp=3.0, Ki=0.15, Kd=0.8, output_limit=10)
         self.recording = True  # 启动数据记录
         self.follow_polyline()
@@ -1036,24 +1043,55 @@ class Simulator(tk.Tk):
             self.log(f"折线循迹结束，记录数据索引：{self.polyline_record_start} 到 {self.polyline_record_end}")
             return
 
-        target_x, target_y = self.polyline_points[self.polyline_index]
+        # 获取当前位置
         car_x, car_y = self.car_pose[0, 0], self.car_pose[1, 0]
         theta_car = self.car_pose[2, 0]
+
+        # 当前折线目标点
+        target_x, target_y = self.polyline_points[self.polyline_index]
         dx = target_x - car_x
         dy = target_y - car_y
-        target_theta = np.arctan2(dy, dx)
+        distance_to_target = np.hypot(dx, dy)
+
+        # ---------- 动态前视距离 ----------
+        # 初步速度控制（用于计算动态前视距离）
+        speed_control = self.speed_pid.compute(distance_to_target)
+        speed_control = np.clip(speed_control, -10, 10)
+
+        # 距离越远，速度越快，前视越长
+        base_lookahead = 10.0
+        variable_component = 0.5 * abs(speed_control)
+        lookahead_distance = np.clip(base_lookahead + variable_component, 10, 25)
+
+        # ---------- 限制前视点在当前折线段上 ----------
+        if distance_to_target > 1e-5:
+            unit_dx = dx / distance_to_target
+            unit_dy = dy / distance_to_target
+            actual_lookahead = min(lookahead_distance, distance_to_target)
+            lookahead_x = car_x + unit_dx * actual_lookahead
+            lookahead_y = car_y + unit_dy * actual_lookahead
+        else:
+            # 避免除零
+            lookahead_x, lookahead_y = target_x, target_y
+
+        # ---------- 使用前视点计算偏角 ----------
+        dx_la = lookahead_x - car_x
+        dy_la = lookahead_y - car_y
+        target_theta = np.arctan2(dy_la, dx_la)
         heading_error = (target_theta - theta_car + np.pi) % (2 * np.pi) - np.pi
         heading_error = np.rad2deg(heading_error)
 
+        # PID 控制
         steering_control = self.steering_pid.compute(heading_error)
-        distance_to_target = np.hypot(dx, dy)
-        speed_control = self.speed_pid.compute(distance_to_target)
 
-        speed_control = np.clip(speed_control, -10, 10)
+        # 速度映射到输出范围
         speed_mapped = np.interp(speed_control, [-10, 10], [-80, 80])
+
+        # 控制信号输出
         self.car_control_value[0, 0] = speed_mapped
         self.car_control_value[1, 0] = steering_control
 
+        # 如果靠近当前折线点，进入下一个点
         if distance_to_target < 10:
             self.polyline_index += 1
 
