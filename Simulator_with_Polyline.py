@@ -1,6 +1,7 @@
 import os
 import sys
 import math
+import random
 import time
 import serial
 import datetime
@@ -334,7 +335,21 @@ class Simulator(tk.Tk):
 
         self.grid = np.zeros((40, 40), dtype=np.uint8)
 
+        # 新增扰动参数
 
+        # 转向扰动
+        self.steering_perturbation_enabled = True  # 是否启用转向扰动
+        self.steering_perturbation_prob = 0.1  # 扰动发生概率 (20%)
+        self.steering_perturbation_counter = 0  # 扰动计数器
+        self.steering_perturbation_interval = 10  # 扰动最小间隔(更新次数)
+        self.steering_perturbation_range = 8  # 转向扰动范围(度)
+
+        # 位移扰动
+        self.position_perturbation_enabled = True  # 是否启用位移扰动
+        self.position_perturbation_prob = 0.06  # 扰动发生概率 (10%)
+        self.position_perturbation_counter = 0  # 扰动计数器
+        self.position_perturbation_interval = 10  # 扰动最小间隔(更新次数)
+        self.position_perturbation_range = 10  # 位移扰动范围(像素)
 
         self.on_mouse_control = False
         self.in_map_edit = False
@@ -832,6 +847,49 @@ class Simulator(tk.Tk):
             self.key_state[key] = False
 
     def update_velocity(self):
+        # 在计算控制量之前添加转向扰动
+        if (self.steering_perturbation_enabled and
+                self.recording and
+                self.steering_perturbation_counter >= self.steering_perturbation_interval and
+                random.random() < self.steering_perturbation_prob):
+
+            # 生成随机扰动角度
+            steering_perturb = random.uniform(-self.steering_perturbation_range, self.steering_perturbation_range)
+
+            # 应用扰动到当前转向角度
+            self.car_control_value[1, 0] += steering_perturb
+
+            # 日志记录
+            self.log(f"施加转向扰动: {steering_perturb:.2f}°")
+
+            # 重置计数器
+            self.steering_perturbation_counter = 0
+        else:
+            self.steering_perturbation_counter += 1
+
+        # 在计算控制量之前添加位移扰动
+        if (self.position_perturbation_enabled and
+                self.recording and
+                self.position_perturbation_counter >= self.position_perturbation_interval and
+                random.random() < self.position_perturbation_prob):
+
+            # 生成随机位移扰动
+            angle = random.uniform(0, 2 * math.pi)  # 随机方向
+            distance = random.uniform(3, self.position_perturbation_range)
+
+            # 应用位移扰动
+            self.car_pose[0, 0] += distance * math.cos(angle)
+            self.car_pose[1, 0] += distance * math.sin(angle)
+
+            # 日志记录
+            self.log(f"施加位移扰动: 方向={math.degrees(angle):.1f}°, 距离={distance:.2f}px")
+
+            # 重置计数器
+            self.position_perturbation_counter = 0
+        else:
+            self.position_perturbation_counter += 1
+
+
         if self.in_keyboard_control:
             for key, pressed in self.key_state.items():
                 if pressed:
