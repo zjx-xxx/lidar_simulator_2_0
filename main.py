@@ -802,13 +802,13 @@ class Simulator(tk.Tk):
             self.road = predict(self.model_cls, X_cls)
 
         if self.in_auto_control and len(second_column_as_row) == 360:
-            # if self.deltatheta > 5:
-            #     self.towards = 2
-            # elif self.deltatheta < -5:
-            #     self.towards = 1
-            # else:
-            #     self.towards = 0
-            input_reg = torch.tensor([second_column_as_row + [self.road] + [2]], dtype=torch.float32)#2代表右转
+            if abs(self.predicted_angle) < 5:
+                self.towards = 0
+            elif self.predicted_angle < -5:
+                self.towards = 1
+            else:
+                self.towards = 2
+            input_reg = torch.tensor([second_column_as_row + [self.road] + [self.towards]], dtype=torch.float32)#2代表右转
             with torch.no_grad():
                 pred_angle = self.model_reg(input_reg).item()
                 pred_angle = np.clip(pred_angle, -30, 30)
