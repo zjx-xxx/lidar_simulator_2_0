@@ -31,8 +31,8 @@ def resource_path(relative_path):
         base_path = os.path.abspath(".")
     return os.path.join(base_path, relative_path)
 
-def map_exp(x, factor):
-    return 0.5/(math.exp(- x * factor * x * factor) + 0.5)
+# def map_exp(x, factor):
+#     return 0.5/(math.exp(- x * factor * x * factor) + 0.5)
 
 
 #PID控制器
@@ -814,7 +814,7 @@ class Simulator(tk.Tk):
         self.start_dataindex = self.dataindex  #记录起始索引
         self.log("打开鼠标跟随")
         # 在 __init__ 里初始化 PID 控制器
-        self.steering_pid = PID(Kp=3.0, Ki=0.2, Kd=0.6, output_limit=30, map=1)
+        self.steering_pid = PID(Kp=5.0, Ki=0.2, Kd=0.6, output_limit=30, map=1)
         self.speed_pid = PID(Kp=3.0, Ki=0.15, Kd=0.8, output_limit=10)
         self.simulation_canvas.bind("<Button-1>", self.mouse_control)
 
@@ -1134,6 +1134,11 @@ class Simulator(tk.Tk):
         distance_to_target = np.hypot(dx, dy)
         self.current_target_point = (target_x, target_y)
 
+        car_face_x = np.cos(self.car_pose[2, 0])
+        car_face_y = np.sin(self.car_pose[2, 0])
+
+
+
         speed_control = self.speed_pid.compute(distance_to_target)
         speed_control = np.clip(speed_control, -10, 10)
 
@@ -1173,6 +1178,11 @@ class Simulator(tk.Tk):
 
         self.draw_follow_points()
         self.after(50, self.follow_polyline)
+
+        dot_product = np.dot([car_face_x, car_face_y], [dx, dy])
+        while dot_product < 0:
+            self.polyline_index += 1
+            dot_product = np.dot([car_face_x, car_face_y], [car_x, car_y])
 
     def draw_follow_points(self):
         self.simulation_canvas.delete("follow_point")
