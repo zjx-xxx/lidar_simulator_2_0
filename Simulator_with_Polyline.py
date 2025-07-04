@@ -1171,13 +1171,20 @@ class Simulator(tk.Tk):
 
         if distance_to_target < 10 and self.polyline_index < len(self.polyline_points) - 1:
             self.polyline_index += 1
+            target_x, target_y = self.polyline_points[self.polyline_index]
+            dx = target_x - car_x
+            dy = target_y - car_y
 
         self.draw_follow_points()
         self.after(50, self.follow_polyline)
 
         dot_product = np.dot([car_face_x, car_face_y], [dx, dy])
-        while dot_product < 0:
+        # 避免死循环：加 index 上限限制，同时每轮更新 dx dy 和目标点
+        while dot_product < 0 and self.polyline_index < len(self.polyline_points) - 1:
             self.polyline_index += 1
+            target_x, target_y = self.polyline_points[self.polyline_index]
+            dx = target_x - car_x
+            dy = target_y - car_y
             dot_product = np.dot([car_face_x, car_face_y], [dx, dy])
 
     def draw_follow_points(self):
