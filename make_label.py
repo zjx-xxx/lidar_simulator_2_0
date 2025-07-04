@@ -5,6 +5,8 @@ import os
 import re
 
 def draw_lidar_from_csv(csv_files):
+    last_type_label = None
+    last_direction_label = None
     index = 0
     total_files = len(csv_files)
     if total_files == 0:
@@ -74,9 +76,16 @@ def draw_lidar_from_csv(csv_files):
             return
 
     def save_label(event=None):
-        nonlocal index
+        nonlocal index, last_type_label, last_direction_label
         type_label = type_entry.get().strip()
         direction_label = direction_entry.get().strip()
+
+        # 如果为空则继承上一次的值
+        if not type_label and last_type_label is not None:
+            type_label = last_type_label
+        if not direction_label and last_direction_label is not None:
+            direction_label = last_direction_label
+
         csv_file = csv_files[index]
 
         # 舍弃条件
@@ -104,6 +113,11 @@ def draw_lidar_from_csv(csv_files):
             df.to_csv(save_path, index=False, header=False)
             os.remove(f'./mydata/raw/{csv_file}')
             print(f"已保存：{csv_file}，路径类型={type_label}，方向={direction_label}")
+
+            # 保存这次输入为上一次输入
+            last_type_label = type_label
+            last_direction_label = direction_label
+
         except Exception as e:
             print(f"保存标签时出错: {e}")
             return

@@ -12,7 +12,7 @@ from tqdm import tqdm
 # CUDA 检查
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def weighted_mse_loss(pred, target, base_weight=1.0, angle_weight=10.0):
+def weighted_mse_loss(pred, target, base_weight=1.0, angle_weight=10):
     """
     给转角不为0的数据一个更高的权重，用于处理数据不平衡。
     - base_weight: 所有样本的基础权重
@@ -38,7 +38,7 @@ class LidarRegressionDataset(Dataset):
         return x, y
 
 # 回归训练函数
-def train(model, X_train, y_train, num_epochs=1000, batch_size=64, learning_rate=0.001):
+def train(model, X_train, y_train, num_epochs=3000, batch_size=64, learning_rate=0.001):
     print(f'Training on {device}')
 
     train_dataset = LidarRegressionDataset(X_train, y_train)

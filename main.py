@@ -802,9 +802,9 @@ class Simulator(tk.Tk):
             self.road = predict(self.model_cls, X_cls)
 
         if self.in_auto_control and len(second_column_as_row) == 360:
-            if abs(self.predicted_angle) < 5:
+            if abs(self.predicted_angle) < 7:
                 self.towards = 0
-            elif self.predicted_angle < -5:
+            elif self.predicted_angle < -7:
                 self.towards = 1
             else:
                 self.towards = 2
