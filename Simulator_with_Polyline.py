@@ -1116,6 +1116,9 @@ class Simulator(tk.Tk):
         self.log(f"折线循迹结束，记录数据索引：{self.polyline_record_start} 到 {self.polyline_record_end}")
 
     def follow_polyline(self):
+        if not  self.polyline_following:
+            return
+
         if self.polyline_index >= len(self.polyline_points):
             self.close_polyline_following()
             return
@@ -1186,6 +1189,14 @@ class Simulator(tk.Tk):
             dx = target_x - car_x
             dy = target_y - car_y
             dot_product = np.dot([car_face_x, car_face_y], [dx, dy])
+
+        if self.polyline_index >= len(self.polyline_points) - 1:
+            final_dx = self.polyline_points[-1][0] - car_x
+            final_dy = self.polyline_points[-1][1] - car_y
+            final_dist = np.hypot(final_dx, final_dy)
+            if final_dist < 5:  # 或根据你系统调优后的终点距离
+                self.close_polyline_following()
+                return
 
     def draw_follow_points(self):
         self.simulation_canvas.delete("follow_point")
