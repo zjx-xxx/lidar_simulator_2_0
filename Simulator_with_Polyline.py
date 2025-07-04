@@ -97,7 +97,6 @@ class Simulator(tk.Tk):
         self.lidar_canvas = tk.Canvas(middle_frame, bg="lightgray", width=500, height=500)
         self.lidar_canvas.pack(side=tk.TOP)
 
-
         log_frame = tk.Frame(middle_frame)
         log_frame.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
 
@@ -110,6 +109,10 @@ class Simulator(tk.Tk):
         log_text_frame.pack(side=tk.TOP, fill=tk.X)
         log_text_frame.grid_columnconfigure(0, weight=1)
         log_text_frame.grid_columnconfigure(1, weight=1)
+
+        self.completed_polyline_segments = []  # 已完成的折线段（绿色）
+        self.follow_step_counter = 0
+        self.current_target_point = None
 
         self.timer_label = tk.Label(
             log_text_frame, text=f"用时: {0:>5d}", font=("等线", 12, "bold")
@@ -432,6 +435,9 @@ class Simulator(tk.Tk):
         self.polyline_record_start = None
         self.polyline_record_end = None
         self.polyline_segments = []  # 保存多个折线段
+
+        self.passed_points = []  # 已跟随的点（绿色）
+        self.current_follow_point = None  # 当前跟随的前视点（红色）
 
     def log(self, message):
         self.log_text.config(state=tk.NORMAL)
@@ -1096,7 +1102,9 @@ class Simulator(tk.Tk):
         self.polyline_index = 0
         self.steering_pid = PID(Kp=6.0, Ki=0.1, Kd=0.3, output_limit=30)
         self.speed_pid = PID(Kp=3.0, Ki=0.15, Kd=0.8, output_limit=10)
-        self.recording = True  # 启动数据记录
+        self.recording = True
+        self.followed_path_points = []  # 重置走过的点
+        self.follow_step_counter = 0
         self.follow_polyline()
 
     def close_polyline_following(self):
@@ -1111,27 +1119,28 @@ class Simulator(tk.Tk):
         if self.polyline_index >= len(self.polyline_points):
             self.close_polyline_following()
             return
-        # 获取当前位置
+
         car_x, car_y = self.car_pose[0, 0], self.car_pose[1, 0]
         theta_car = self.car_pose[2, 0]
 
-        # 当前折线目标点
+        # 每隔几帧记录小车位置作为轨迹点
+        self.follow_step_counter += 1
+        if self.follow_step_counter % 3 == 0:
+            self.followed_path_points.append((car_x, car_y))
+
         target_x, target_y = self.polyline_points[self.polyline_index]
         dx = target_x - car_x
         dy = target_y - car_y
         distance_to_target = np.hypot(dx, dy)
+        self.current_target_point = (target_x, target_y)
 
-        # ---------- 动态前视距离 ----------
-        # 初步速度控制（用于计算动态前视距离）
         speed_control = self.speed_pid.compute(distance_to_target)
         speed_control = np.clip(speed_control, -10, 10)
 
-        # 距离越远，速度越快，前视越长
         base_lookahead = 10.0
         variable_component = 0.5 * abs(speed_control)
         lookahead_distance = np.clip(base_lookahead + variable_component, 10, 25)
 
-        # ---------- 限制前视点在当前折线段上 ----------
         if distance_to_target > 1e-5:
             unit_dx = dx / distance_to_target
             unit_dy = dy / distance_to_target
@@ -1139,31 +1148,63 @@ class Simulator(tk.Tk):
             lookahead_x = car_x + unit_dx * actual_lookahead
             lookahead_y = car_y + unit_dy * actual_lookahead
         else:
-            # 避免除零
             lookahead_x, lookahead_y = target_x, target_y
 
-        # ---------- 使用前视点计算偏角 ----------
+        self.current_follow_point = (lookahead_x, lookahead_y)
+
         dx_la = lookahead_x - car_x
         dy_la = lookahead_y - car_y
         target_theta = np.arctan2(dy_la, dx_la)
         heading_error = (target_theta - theta_car + np.pi) % (2 * np.pi) - np.pi
         heading_error = np.rad2deg(heading_error)
 
-        # PID 控制
         steering_control = self.steering_pid.compute(heading_error)
-
-        # 速度映射到输出范围
         speed_mapped = np.interp(speed_control, [-10, 10], [-80, 80])
 
-        # 控制信号输出
         self.car_control_value[0, 0] = speed_mapped
         self.car_control_value[1, 0] = steering_control
 
-        # 如果靠近当前折线点，进入下一个点
-        if distance_to_target < 10:
+        while distance_to_target < 5 and self.polyline_index < len(self.polyline_points) - 1:
             self.polyline_index += 1
+            target_x, target_y = self.polyline_points[self.polyline_index]
+            dx = target_x - car_x
+            dy = target_y - car_y
+            distance_to_target = np.hypot(dx, dy)
 
+        self.draw_follow_points()
         self.after(50, self.follow_polyline)
+
+    def draw_follow_points(self):
+        self.simulation_canvas.delete("follow_point")
+
+        # 1. 原始折线：蓝色
+        for i in range(1, len(self.polyline_points)):
+            x1, y1 = self.polyline_points[i - 1]
+            x2, y2 = self.polyline_points[i]
+            self.simulation_canvas.create_line(
+                x1, y1, x2, y2, fill='blue', width=2, tags="follow_point"
+            )
+
+        # 2. 实际走过的轨迹线段：绿色
+        for i in range(1, len(self.followed_path_points)):
+            x1, y1 = self.followed_path_points[i - 1]
+            x2, y2 = self.followed_path_points[i]
+            self.simulation_canvas.create_line(
+                x1, y1, x2, y2, fill='green', width=2, tags="follow_point"
+            )
+
+        # 3. 当前前视点：红色圆点
+        if self.current_follow_point:
+            x, y = self.current_follow_point
+            self.simulation_canvas.create_oval(
+                x - 5, y - 5, x + 5, y + 5, fill='red', outline='white', width=2, tags="follow_point")
+
+        # 4. 当前路径点（目标点）：黄色圆点
+        if self.current_target_point:
+            x, y = self.current_target_point
+            self.simulation_canvas.create_oval(
+                x - 4, y - 4, x + 4, y + 4, fill='yellow', outline='black', width=1, tags="follow_point"
+            )
 
     def lidar_detect(self, x1, y1, x2, y2):
         grid_size = 20
