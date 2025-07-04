@@ -1169,12 +1169,8 @@ class Simulator(tk.Tk):
         self.car_control_value[0, 0] = speed_mapped
         self.car_control_value[1, 0] = steering_control
 
-        while distance_to_target < 5 and self.polyline_index < len(self.polyline_points) - 1:
+        if distance_to_target < 10 and self.polyline_index < len(self.polyline_points) - 1:
             self.polyline_index += 1
-            target_x, target_y = self.polyline_points[self.polyline_index]
-            dx = target_x - car_x
-            dy = target_y - car_y
-            distance_to_target = np.hypot(dx, dy)
 
         self.draw_follow_points()
         self.after(50, self.follow_polyline)
