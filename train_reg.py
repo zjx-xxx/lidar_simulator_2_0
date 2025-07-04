@@ -38,7 +38,7 @@ class LidarRegressionDataset(Dataset):
         return x, y
 
 # 回归训练函数
-def train(model, X_train, y_train, num_epochs=500, batch_size=64, learning_rate=0.001):
+def train(model, X_train, y_train, num_epochs=1000, batch_size=64, learning_rate=0.001):
     print(f'Training on {device}')
 
     train_dataset = LidarRegressionDataset(X_train, y_train)

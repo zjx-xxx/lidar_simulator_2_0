@@ -341,7 +341,7 @@ class Simulator(tk.Tk):
         # 新增扰动参数
 
         # 转向扰动
-        self.steering_perturbation_enabled = True  # 是否启用转向扰动
+        self.steering_perturbation_enabled = False  # 是否启用转向扰动
         self.steering_perturbation_prob = 0.1  # 扰动发生概率 (20%)
         self.steering_perturbation_counter = 0  # 扰动计数器
         self.steering_perturbation_interval = 10  # 扰动最小间隔(更新次数)
