@@ -1178,7 +1178,7 @@ class Simulator(tk.Tk):
         dot_product = np.dot([car_face_x, car_face_y], [dx, dy])
         while dot_product < 0:
             self.polyline_index += 1
-            dot_product = np.dot([car_face_x, car_face_y], [car_x, car_y])
+            dot_product = np.dot([car_face_x, car_face_y], [dx, dy])
 
     def draw_follow_points(self):
         self.simulation_canvas.delete("follow_point")
