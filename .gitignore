@@ -6,3 +6,7 @@
 
 # 忽略 Python 编译缓存文件
 *.py[cod]
+
+./mydata/labeled
+
+./mydata/labeledData

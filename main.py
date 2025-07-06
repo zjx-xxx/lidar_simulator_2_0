@@ -2,16 +2,11 @@ import os
 import sys
 import math
 import time
-import serial
 import datetime
-import serial.tools.list_ports
 import numpy as np
 import tkinter as tk
 from PIL import Image, ImageTk
 from tkinter import ttk, messagebox, filedialog
-
-from sympy import false
-
 from predict import  predict
 import torch
 from model import NeuralNetwork
@@ -19,9 +14,6 @@ from model_reg import RegressionNetwork
 import numpy as np
 import time
 import pandas as pd
-import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
-
 
 def resource_path(relative_path):
     try:
@@ -318,7 +310,8 @@ class Simulator(tk.Tk):
         self.in_set_car_pose = False
         self.data = np.zeros((1, 360))
         self.model = NeuralNetwork()
-        self.model.load_state_dict(torch.load('./model/model', weights_only=True))
+        state_dict = torch.load('./model/model', map_location=torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
+        self.model.load_state_dict(state_dict)
 
         self.key_state = {'w': False, 's': False, 'a': False, 'd': False}
         self.key_press_time = {}
@@ -353,11 +346,13 @@ class Simulator(tk.Tk):
 
         # 初始化两个模型
         self.model_cls = NeuralNetwork()
-        self.model_cls.load_state_dict(torch.load('./model/model', weights_only=True))
+        state_dict_cls = torch.load('./model/model', map_location=torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
+        self.model_cls.load_state_dict(state_dict_cls)
         self.model_cls.eval()
 
         self.model_reg = RegressionNetwork()
-        self.model_reg.load_state_dict(torch.load('./model/model_regression.pth'))
+        state_dict_reg = torch.load('./model/model_regression.pth', map_location=torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
+        self.model_reg.load_state_dict(state_dict_reg)
         self.model_reg.eval()
 
         self.predicted_angle = 0.0
@@ -802,15 +797,22 @@ class Simulator(tk.Tk):
             self.road = predict(self.model_cls, X_cls)
 
         if self.in_auto_control and len(second_column_as_row) == 360:
-            if abs(self.predicted_angle) < 7:
+            # if abs(self.predicted_angle) < 7:
+            #     self.towards = 0
+            # elif self.predicted_angle < -7:
+            #     self.towards = 1
+            # else:
+            #     self.towards = 2
+            if self.road == 0:
                 self.towards = 0
-            elif self.predicted_angle < -7:
-                self.towards = 1
             else:
-                self.towards = 2
-            input_reg = torch.tensor([second_column_as_row + [self.road] + [self.towards]], dtype=torch.float32)#2代表右转
+                self.towards = 1
+            x_lidar = torch.tensor([second_column_as_row], dtype=torch.float32)  # [1, 360]
+            road_type = torch.tensor([self.road], dtype=torch.long)  # [1]
+            turn_direction = torch.tensor([self.towards], dtype=torch.long)  # [1]
+
             with torch.no_grad():
-                pred_angle = self.model_reg(input_reg).item()
+                pred_angle = self.model_reg(x_lidar, road_type, turn_direction).item()
                 pred_angle = np.clip(pred_angle, -30, 30)
                 self.car_control_value[1, 0] = pred_angle
                 self.predicted_angle = pred_angle

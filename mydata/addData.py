@@ -81,18 +81,20 @@ for file_name in matching_files:
     except Exception as e:
         print(f"{file_name} 处理出错: {e}")
 
-# 合并并保存 Data.csv
+# 合并数据
 if all_data:
     merged_data = pd.concat(all_data, axis=0, ignore_index=True)
     merged_data.to_csv('./Data.csv', header=False, index=False)
-else:
-    print("没有数据合并，未生成 Data.csv")
-    merged_data = pd.DataFrame()
 
-# 划分训练/测试集并导出各标签
-if not merged_data.empty:
-    Test = merged_data.sample(frac=0.1, random_state=42)
-    Train = merged_data.drop(Test.index)
+    # 先整体打乱
+    merged_data = merged_data.sample(frac=1, random_state=42).reset_index(drop=True)
+
+    # 划分训练集和测试集（10%测试）
+    test_size = 0.1
+    test_count = int(len(merged_data) * test_size)
+
+    Test = merged_data.iloc[:test_count, :]
+    Train = merged_data.iloc[test_count:, :]
 
     # 拆分输入与标签
     X_train = Train.iloc[:, :-3]
@@ -122,14 +124,14 @@ if not merged_data.empty:
     Y_type_test.to_csv('./type/Y_test.csv', header=False, index=False)
     Y_towards_test.to_csv('./towards/Y_test.csv', header=False, index=False)
 
-    print("训练集和测试集已保存")
+    print("训练集和测试集已打乱并保存")
 else:
-    print("无数据，跳过训练测试集划分和保存")
+    print("没有数据合并，未生成 Data.csv")
 
 # 归档原始文件
 now = datetime.datetime.now()
 suffix = now.strftime("%m_%d_%H_%M")
-archive_folder = f'./labeledData{suffix}'
+archive_folder = f'./labeledData/{suffix}'
 os.makedirs(archive_folder, exist_ok=True)
 
 for file_name in matching_files:

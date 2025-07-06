@@ -222,27 +222,6 @@ class Simulator(tk.Tk):
         )
         set_car_pose_button.pack(side=tk.TOP, fill=tk.BOTH, pady=5)
 
-        toggle_keyboard_control_button = tk.Button(
-            button_frame,
-            text="开启/关闭键盘控制",
-            command=self.toggle_keyboard_control,
-            width=button_width,
-            height=button_height,
-            font=("等线", 12, "bold")
-        )
-
-        # toggle_mouse_control_button = tk.Button(
-        #     button_frame,
-        #     text="开启/关闭鼠标跟随",
-        #     command=self.toggle_mouse_control,
-        #     width=button_width,
-        #     height=button_height,
-        #     font=("等线", 12, "bold")
-        # )
-        # toggle_mouse_control_button.pack(side=tk.TOP, fill=tk.BOTH, pady=5)
-
-        toggle_keyboard_control_button.pack(side=tk.TOP, fill=tk.BOTH, pady=5)
-
         toggle_clear_data_button = tk.Button(
             button_frame,
             text="清除数据",
@@ -252,17 +231,6 @@ class Simulator(tk.Tk):
             font=("等线", 12, "bold")
         )
         toggle_clear_data_button.pack(side=tk.TOP, fill=tk.BOTH, pady=5)
-
-
-        toggle_auto_control_button = tk.Button(
-            button_frame,
-            text="开启/关闭自动控制",
-            command=self.toggle_auto_control,
-            width=button_width,
-            height=button_height,
-            font=("等线", 12, "bold")
-        )
-        toggle_auto_control_button.pack(side=tk.TOP, fill=tk.BOTH, pady=5)
 
         clear_log_button = tk.Button(
             button_frame,
@@ -296,16 +264,6 @@ class Simulator(tk.Tk):
 
         self.start_dataindex = None
         self.end_dataindex = None
-
-        # delete_mouse_data_button = tk.Button(
-        #     button_frame,
-        #     text="撤销上次鼠标记录",
-        #     command=self.delete_last_mouse_data,
-        #     width=button_width,
-        #     height=button_height,
-        #     font=("等线", 12, "bold")
-        # )
-        # delete_mouse_data_button.pack(side=tk.TOP, fill=tk.BOTH, pady=5)
 
         # --- 在 start_polyline_following() 中添加记录起始索引 ---
         self.polyline_record_start = self.dataindex
@@ -348,7 +306,7 @@ class Simulator(tk.Tk):
         self.steering_perturbation_range = 8  # 转向扰动范围(度)
 
         # 位移扰动
-        self.position_perturbation_enabled = False  # 是否启用位移扰动
+        self.position_perturbation_enabled = True  # 是否启用位移扰动
         self.position_perturbation_prob = 0.06  # 扰动发生概率 (10%)
         self.position_perturbation_counter = 0  # 扰动计数器
         self.position_perturbation_interval = 10  # 扰动最小间隔(更新次数)
@@ -362,7 +320,8 @@ class Simulator(tk.Tk):
         self.in_set_car_pose = False
         self.data = np.zeros((1, 360))
         self.model = NeuralNetwork()
-        self.model.load_state_dict(torch.load('./model/model', weights_only=True))
+        state_dict = torch.load('./model/model', map_location=torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
+        self.model.load_state_dict(state_dict)
 
         self.key_state = {'w': False, 's': False, 'a': False, 'd': False}
         self.key_press_time = {}
@@ -396,11 +355,13 @@ class Simulator(tk.Tk):
 
         # 初始化两个模型
         self.model_cls = NeuralNetwork()
-        self.model_cls.load_state_dict(torch.load('./model/model', weights_only=True))
+        state_dict_cls = torch.load('./model/model', map_location=torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
+        self.model_cls.load_state_dict(state_dict_cls)
         self.model_cls.eval()
 
         self.model_reg = RegressionNetwork()
-        self.model_reg.load_state_dict(torch.load('./model/model_regression.pth'))
+        state_dict_reg = torch.load('./model/model_regression.pth', map_location=torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
+        self.model_reg.load_state_dict(state_dict_reg)
         self.model_reg.eval()
 
         self.predicted_angle = 0.0
@@ -990,21 +951,6 @@ class Simulator(tk.Tk):
             with open('index.txt', 'w') as f:
                 f.write(str(self.dataindex))
 
-    # def model_control(self):
-    #     start_time = time.time()
-    #     if self.in_auto_control:
-    #         i = 0
-    #         for _, distance in self.lidar_result:
-    #             self.data[0, i] = distance
-    #             i = i + 1
-    #         speed, angle = car_control(self.data)
-    #         # speed, angle = predict(self.model, self.data)
-    #         self.car_control_value[0, 0] = speed
-    #         self.car_control_value[1, 0] = angle
-    #     end_time = time.time()
-    #     delay_time = self.time_interval - (end_time - start_time)
-    #     self.after(int(max(delay_time, 0) * 1000), self.model_control)
-
     def close_mouse_control_handle(self, event):
         self.close_mouse_control()
 
@@ -1318,28 +1264,6 @@ class Simulator(tk.Tk):
                     text_x, text_y, text=f"{distance}", fill="blue"
                 )
 
-    def toggle_auto_control(self):
-        if self.in_auto_control:
-            self.close_auto_control()
-        else:
-            self.open_auto_control()
-
-    def open_auto_control(self):
-        if self.in_keyboard_control:
-            self.log("请先关闭键盘控制")
-            return
-        if self.on_mouse_control:
-            self.log("请先关闭鼠标控制")
-            return
-        if self.car is None:
-            self.log("请先设置小车位置/朝向")
-            return
-        if self.in_map_edit:
-            self.close_map_edit()
-        self.in_auto_control = True
-        self.timestamp = time.time()
-        self.collision_count = 0
-        self.log("开启自动控制（使用模型预测）")
 
     def toggle_clear_data(self):
         if self.on_mouse_control:
@@ -1375,10 +1299,6 @@ class Simulator(tk.Tk):
                     os.remove(file_path)
         self.log("已经删除所有数据")
         return
-
-    def close_auto_control(self):
-        self.in_auto_control = False
-        self.log("关闭自动控制")
 
     def clear_log(self):
         self.log_text.config(state=tk.NORMAL)
