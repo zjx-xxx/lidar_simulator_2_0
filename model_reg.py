@@ -17,10 +17,10 @@ class RegressionNetwork(nn.Module):
         self.towards_emb = nn.Embedding(3, 4)   # 转向方向
 
         self.fc = nn.Sequential(
-            nn.Linear(32 * 180 + 8, 128),
+            nn.Linear(32 * 180 + 8, 64),
             nn.ReLU(),
-            nn.Dropout(0.3),
-            nn.Linear(128, 1)
+            nn.Dropout(0.5),
+            nn.Linear(64, 1)
         )
 
     def forward(self, x, road_type, turn_direction):

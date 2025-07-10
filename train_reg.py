@@ -38,16 +38,24 @@ class LidarRegressionDataset(Dataset):
 def evaluate(model, dataloader):
     model.eval()
     total_loss = 0.0
+    total_mae = 0.0
     total_samples = 0
     with torch.no_grad():
         for batch in dataloader:
             x_lidar, road_type, turn_direction, target = [b.to(device) for b in batch]
             outputs = model(x_lidar, road_type, turn_direction)
+
             batch_size = target.size(0)
-            loss = weighted_mse_loss(outputs, target) * batch_size  # 总损失（加权）乘以样本数
+            loss = weighted_mse_loss(outputs, target) * batch_size
+            mae = torch.sum(torch.abs(outputs - target))
+
             total_loss += loss.item()
+            total_mae += mae.item()
             total_samples += batch_size
-    return total_loss / total_samples
+
+    avg_loss = total_loss / total_samples
+    avg_mae = total_mae / total_samples
+    return avg_loss, avg_mae
 
 
 def train(model, train_data, val_data,
@@ -57,7 +65,7 @@ def train(model, train_data, val_data,
     train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_data, batch_size=batch_size)
 
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-5)
 
     best_val_loss = float('inf')
     best_model_state = None
@@ -77,11 +85,15 @@ def train(model, train_data, val_data,
             optimizer.step()
 
             running_loss += loss.item() * x_lidar.size(0)
+            # with torch.no_grad():
+            #     print(
+            #         f"Debug | Output mean: {outputs.mean().item():.4f}, Target mean: {target.mean().item():.4f}, Loss: {loss.item():.4f}")
 
-        train_loss = running_loss / len(train_loader)
-        val_loss = evaluate(model, val_loader)
+        total_train_samples = len(train_dataset)
+        train_loss = running_loss / total_train_samples
 
-        print(f"Epoch {epoch:>4d} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
+        val_loss, val_mae = evaluate(model, val_loader)
+        print(f"Epoch {epoch} | Val Loss: {val_loss:.2f} | Val MAE: {val_mae:.2f}")
 
         # ✅ 是否进入 early stop 区间
         if val_loss < best_val_loss:
@@ -127,7 +139,10 @@ if __name__ == '__main__':
     # 初始化模型
     model = RegressionNetwork().to(device)
 
+    print("Train y min/max/mean/std:", y_train.min(), y_train.max(), y_train.mean(), y_train.std())
+    print("Test y min/max/mean/std:", y_val.min(), y_val.max(), y_val.mean(), y_val.std())
+
     # 启动训练
     train(model, train_dataset, val_dataset,
           num_epochs=3000, batch_size=64, learning_rate=0.001,
-          early_stop_patience=15, min_loss_threshold=50000.0)
+          early_stop_patience=100, min_loss_threshold=55000.0)
