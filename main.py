@@ -351,7 +351,7 @@ class Simulator(tk.Tk):
         self.model_cls.eval()
 
         self.model_reg = RegressionNetwork()
-        state_dict_reg = torch.load('./model/model_regression.pth', map_location=torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
+        state_dict_reg = torch.load('./model/model_regression_best.pth', map_location=torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
         self.model_reg.load_state_dict(state_dict_reg)
         self.model_reg.eval()
 
