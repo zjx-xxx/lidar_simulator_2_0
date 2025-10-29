@@ -1,29 +1,38 @@
-# train_reg.py
+
+import os
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import pandas as pd
+import matplotlib.pyplot as plt
 from model_reg import RegressionNetwork
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
-# CUDA 检查
+# =========================
+# 设备
+# =========================
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def weighted_mse_loss(pred, target, base_weight=1.0, angle_weight=10):
+
+# =========================
+# 加权 MSE（与原版一致）
+# =========================
+def weighted_mse_loss(pred, target, base_weight=1.0, angle_weight=10.0):
     """
     给转角不为0的数据一个更高的权重，用于处理数据不平衡。
-    - base_weight: 所有样本的基础权重
-    - angle_weight: 与角度大小相关的额外权重
+    权重 = base_weight + angle_weight * abs(真实角度/30)   # 归一化到[-1,1]范围的权重因子
     """
-    # 权重 = 1 + angle_weight * abs(真实角度)
-    weights = base_weight + angle_weight * torch.abs(target)
+    weights = base_weight + angle_weight * torch.abs(target) / 30.0
     loss = weights * (pred - target) ** 2
     return loss.mean()
 
-# 回归数据集（无分类 augment）
+
+# =========================
+# 数据集（与原版一致）
+# =========================
 class LidarRegressionDataset(Dataset):
     def __init__(self, X, y):
         self.X = torch.tensor(X, dtype=torch.float32)
@@ -37,54 +46,237 @@ class LidarRegressionDataset(Dataset):
         y = self.y[idx]
         return x, y
 
-# 回归训练函数
-def train(model, X_train, y_train, num_epochs=3000, batch_size=64, learning_rate=0.001):
-    print(f'Training on {device}')
 
-    train_dataset = LidarRegressionDataset(X_train, y_train)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+# =========================
+# 评估：Loss / MAE / Hit@3°
+# =========================
+@torch.no_grad()
+def evaluate(model, dataloader,
+             base_weight=1.0, angle_weight=10.0,
+             hit_threshold_deg=3.0):
+    model.eval()
+    total_loss = 0.0
+    total_mae = 0.0
+    total_hit = 0.0
+    total_samples = 0
 
-    # criterion = nn.MSELoss()使用加权时无需criterion
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    for data, target in dataloader:
+        data, target = data.to(device), target.to(device)
+        outputs = model(data).squeeze()
 
-    for epoch in tqdm(range(num_epochs), desc="Training Progress"):
+        loss = weighted_mse_loss(outputs, target,
+                                 base_weight=base_weight,
+                                 angle_weight=angle_weight)
+
+        mae = torch.sum(torch.abs(outputs - target)).item()
+        hit = torch.sum((torch.abs(outputs - target) < hit_threshold_deg).float()).item()
+
+        bs = target.size(0)
+        total_loss += loss.item() * bs
+        total_mae += mae
+        total_hit += hit
+        total_samples += bs
+
+    avg_loss = total_loss / max(total_samples, 1)
+    avg_mae = total_mae / max(total_samples, 1)
+    hit_rate = total_hit / max(total_samples, 1)
+    return avg_loss, avg_mae, hit_rate
+
+
+# =========================
+# 训练主循环（加入验证/早停/调度/记录历史）
+# =========================
+def train(model, train_data, val_data,
+          num_epochs=1000, batch_size=64, learning_rate=1e-3,
+          early_stop_patience=50,
+          base_weight=1.0, angle_weight=10.0):
+
+    train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_data, batch_size=batch_size, shuffle=False)
+
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-5)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10)
+
+    history = {
+        "train_loss": [],
+        "val_loss": [],
+        "val_mae": [],
+        "val_hit3": [],
+        "lr": []
+    }
+
+    best_val_loss = float('inf')
+    best_state = None
+    patience = 0
+
+    for epoch in tqdm(range(1, num_epochs + 1), desc="Training Progress"):
         model.train()
         running_loss = 0.0
+        seen = 0
 
-        for batch_idx, (data, target) in enumerate(train_loader):
+        for data, target in train_loader:
             data, target = data.to(device), target.to(device)
 
             optimizer.zero_grad()
-            outputs = model(data)  # 输出 shape: [B]
-            # loss = criterion(outputs, target)
-            loss = weighted_mse_loss(outputs, target)#加权损失函数
+            outputs = model(data).squeeze()
+            loss = weighted_mse_loss(outputs, target,
+                                     base_weight=base_weight,
+                                     angle_weight=angle_weight)
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
 
-            running_loss += loss.item()
+            bs = data.size(0)
+            running_loss += loss.item() * bs
+            seen += bs
 
-        epoch_loss = running_loss / len(train_loader)
-        print(f"Epoch [{epoch + 1}/{num_epochs}] Loss: {epoch_loss:.4f}")
+        train_loss = running_loss / max(seen, 1)
 
+        # 验证
+        val_loss, val_mae, val_hit3 = evaluate(model, val_loader,
+                                               base_weight=base_weight,
+                                               angle_weight=angle_weight,
+                                               hit_threshold_deg=3.0)
+
+        # 学习率调度看 val_loss
+        scheduler.step(val_loss)
+
+        # 记录历史
+        history["train_loss"].append(train_loss)
+        history["val_loss"].append(val_loss)
+        history["val_mae"].append(val_mae)
+        history["val_hit3"].append(val_hit3)
+        history["lr"].append(optimizer.param_groups[0]['lr'])
+
+        print(f"Epoch {epoch} | Train Loss: {train_loss:.4f} | "
+              f"Val Loss: {val_loss:.4f} | Val MAE(deg): {val_mae:.3f} | "
+              f"Hit@3°: {val_hit3*100:.1f}% | LR: {optimizer.param_groups[0]['lr']:.2e}")
+
+        # 早停
+        if val_loss < best_val_loss - 1e-4:
+            best_val_loss = val_loss
+            best_state = model.state_dict()
+            patience = 0
+            os.makedirs('./model', exist_ok=True)
+            torch.save(best_state, './model/model_regression_best.pth')
+            print(f"✅ Best model updated and saved at epoch {epoch}")
+        else:
+            patience += 1
+            if patience >= early_stop_patience:
+                print(f"⏹ Early stopping at epoch {epoch} (no improvement for {early_stop_patience} epochs)")
+                break
+
+    # 恢复最佳并保存最终
+    if best_state is not None:
+        model.load_state_dict(best_state)
+    os.makedirs('./model', exist_ok=True)
+    torch.save(model.state_dict(), './model/model_regression_last.pth')
+    print("🎯 Final model saved.")
+    return history
+
+
+# =========================
+# 画图
+# =========================
+def plot_history(history, out_path='./model/training_curves.png'):
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+
+    epochs = np.arange(1, len(history["train_loss"]) + 1)
+
+    # 曲线1：Loss
+    plt.figure()
+    plt.plot(epochs, history["train_loss"], label='Train Loss')
+    plt.plot(epochs, history["val_loss"], label='Val Loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.title('Loss vs. Epoch')
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(out_path.replace('.png', '_loss.png'))
+    plt.close()
+
+    # 曲线2：Val MAE
+    plt.figure()
+    plt.plot(epochs, history["val_mae"], label='Val MAE (deg)')
+    plt.xlabel('Epoch')
+    plt.ylabel('MAE (deg)')
+    plt.title('Validation MAE vs. Epoch')
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(out_path.replace('.png', '_mae.png'))
+    plt.close()
+
+    # 曲线3：Hit@3°
+    plt.figure()
+    plt.plot(epochs, history["val_hit3"], label='Hit@3°')
+    plt.xlabel('Epoch')
+    plt.ylabel('Hit Rate')
+    plt.title('Hit@3° vs. Epoch')
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(out_path.replace('.png', '_hit3.png'))
+    plt.close()
+
+    # 曲线4：LR
+    plt.figure()
+    plt.plot(epochs, history["lr"], label='Learning Rate')
+    plt.xlabel('Epoch')
+    plt.ylabel('LR')
+    plt.title('Learning Rate vs. Epoch')
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(out_path.replace('.png', '_lr.png'))
+    plt.close()
+
+
+# =========================
+# 数据载入
+# =========================
+def load_split(prefix):
+    """
+    约定：
+      ./mydata/X_{prefix}.csv               -> LiDAR 360
+      ./mydata/direction/Y_{prefix}.csv    -> 角度（度）
+      ./mydata/type/Y_{prefix}.csv         -> 道路类型（可选，未使用）
+      ./mydata/towards/Y_{prefix}.csv      -> 转向方向（可选，未使用）
+    对齐旧版：X = [X_main, path_type, turn_direction] (共 362维)
+    """
+    X_main = pd.read_csv(f'./mydata/X_{prefix}.csv', header=None).values
+    path_type = pd.read_csv(f'./mydata/type/Y_{prefix}.csv', header=None).values
+    turn_direction = pd.read_csv(f'./mydata/towards/Y_{prefix}.csv', header=None).values
+    X = np.hstack([X_main, path_type, turn_direction])
+    y = pd.read_csv(f'./mydata/direction/Y_{prefix}.csv', header=None).values
+    return X, y
+
+
+# =========================
+# 入口
+# =========================
 if __name__ == '__main__':
-    # 读取雷达数据（360维）
-    X_main = pd.read_csv('./mydata/X_train.csv', header=None).values  # shape: [N, 360]
+    # 读取训练/验证集（train/test 命名与另一个脚本保持一致）
+    X_train, y_train = load_split('train')
+    X_val,   y_val   = load_split('test')
 
-    # 读取路径类型（1维）和转角方向（1维）
-    path_type = pd.read_csv('./mydata/type/Y_train.csv', header=None).values  # shape: [N, 1]
-    turn_direction = pd.read_csv('./mydata/towards/Y_train.csv', header=None).values  # shape: [N, 1]
+    # 构建数据集/加载器
+    train_dataset = LidarRegressionDataset(X_train, y_train)
+    val_dataset   = LidarRegressionDataset(X_val,   y_val)
 
-    # 拼接为新的输入 [N, 362]
-    X_train = np.hstack([X_main, path_type, turn_direction])
-
-    # 加载输出标签
-    y_train = pd.read_csv('./mydata/direction/Y_train.csv', header=None).values  # shape: [N, 1]
-
-    # 初始化模型
+    # 初始化模型（保持你原本的 RegressionNetwork 定义）
     model = RegressionNetwork().to(device)
 
-    # 训练模型
-    train(model, X_train, y_train)
+    # 训练
+    history = train(model, train_dataset, val_dataset,
+                    num_epochs=3000,
+                    batch_size=64,
+                    learning_rate=1e-3,
+                    early_stop_patience=100,
+                    base_weight=1.0,
+                    angle_weight=10.0)
 
-    # 保存模型
-    torch.save(model.state_dict(), './model/model_regression.pth')
+    # 画曲线
+    plot_history(history, out_path='./model/training_curves.png')
+    print('📈 Curves saved to ./model/training_curves_*')
