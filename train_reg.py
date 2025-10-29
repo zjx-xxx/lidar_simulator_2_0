@@ -1,4 +1,8 @@
-# train_regression.py
+# =========================================================
+# train_reg.py
+# 三输入回归训练：LiDAR + road_type + turn_direction
+# =========================================================
+
 import os
 import numpy as np
 import torch
@@ -9,9 +13,11 @@ import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
-from model_reg import RegressionNetwork
+from model_reg import RegressionNetwork  # 三输入版本
 
-# ============== 设备/随机种子 ==============
+# =========================
+# 设备与随机种子
+# =========================
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def set_seed(seed=42):
@@ -25,29 +31,38 @@ def set_seed(seed=42):
 
 set_seed(2025)
 
-# ============== 加权 MSE ==============
+# =========================
+# 加权 MSE
+# =========================
 def weighted_mse_loss(pred, target, base_weight=1.0, angle_weight=10.0):
-    """
-    给转角不为0的数据更高权重:
-    weight = base_weight + angle_weight * |target| / 30
-    """
     weights = base_weight + angle_weight * torch.abs(target) / 30.0
     loss = weights * (pred - target) ** 2
     return loss.mean()
 
-# ============== 数据集 ==============
+# =========================
+# Dataset
+# =========================
 class LidarRegressionDataset(Dataset):
-    def __init__(self, X, y):
-        self.X = torch.tensor(X, dtype=torch.float32)
+    def __init__(self, X_main, road_type, turn_direction, y):
+        self.X_main = torch.tensor(X_main, dtype=torch.float32)
+        self.road_type = torch.tensor(road_type, dtype=torch.float32).squeeze()
+        self.turn_direction = torch.tensor(turn_direction, dtype=torch.float32).squeeze()
         self.y = torch.tensor(y, dtype=torch.float32).squeeze()
 
     def __len__(self):
-        return len(self.X)
+        return len(self.X_main)
 
     def __getitem__(self, idx):
-        return self.X[idx], self.y[idx]
+        return (
+            self.X_main[idx],
+            self.road_type[idx],
+            self.turn_direction[idx],
+            self.y[idx],
+        )
 
-# ============== 评估 ==============
+# =========================
+# 评估函数
+# =========================
 @torch.no_grad()
 def evaluate(model, dataloader,
              base_weight=1.0, angle_weight=10.0,
@@ -55,14 +70,17 @@ def evaluate(model, dataloader,
     model.eval()
     total_loss, total_mae, total_hit, total_samples = 0.0, 0.0, 0.0, 0
 
-    for data, target in dataloader:
-        data, target = data.to(device), target.to(device)
-        outputs = model(data).squeeze()
+    for x_lidar, road_type, turn_direction, target in dataloader:
+        x_lidar = x_lidar.to(device)
+        road_type = road_type.to(device)
+        turn_direction = turn_direction.to(device)
+        target = target.to(device)
+
+        outputs = model(x_lidar, road_type, turn_direction)
 
         loss = weighted_mse_loss(outputs, target,
                                  base_weight=base_weight,
                                  angle_weight=angle_weight)
-
         mae = torch.sum(torch.abs(outputs - target)).item()
         hit = torch.sum((torch.abs(outputs - target) < hit_threshold_deg).float()).item()
 
@@ -72,12 +90,14 @@ def evaluate(model, dataloader,
         total_hit  += hit
         total_samples += bs
 
-    avg_loss = total_loss / max(total_samples, 1)
-    avg_mae  = total_mae  / max(total_samples, 1)
-    hit_rate = total_hit   / max(total_samples, 1)
+    avg_loss = total_loss / total_samples
+    avg_mae  = total_mae / total_samples
+    hit_rate = total_hit / total_samples
     return avg_loss, avg_mae, hit_rate
 
-# ============== 训练主循环 ==============
+# =========================
+# 训练主循环
+# =========================
 def train(model, train_data, val_data,
           num_epochs=1000, batch_size=64, learning_rate=1e-3,
           early_stop_patience=50,
@@ -101,11 +121,14 @@ def train(model, train_data, val_data,
         model.train()
         running_loss, seen = 0.0, 0
 
-        for data, target in train_loader:
-            data, target = data.to(device), target.to(device)
+        for x_lidar, road_type, turn_direction, target in train_loader:
+            x_lidar = x_lidar.to(device)
+            road_type = road_type.to(device)
+            turn_direction = turn_direction.to(device)
+            target = target.to(device)
 
             optimizer.zero_grad()
-            outputs = model(data).squeeze()
+            outputs = model(x_lidar, road_type, turn_direction)
             loss = weighted_mse_loss(outputs, target,
                                      base_weight=base_weight,
                                      angle_weight=angle_weight)
@@ -113,7 +136,7 @@ def train(model, train_data, val_data,
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
 
-            bs = data.size(0)
+            bs = x_lidar.size(0)
             running_loss += loss.item() * bs
             seen += bs
 
@@ -138,7 +161,7 @@ def train(model, train_data, val_data,
               f"Val Loss: {val_loss:.4f} | Val MAE(deg): {val_mae:.3f} | "
               f"Hit@3°: {val_hit3*100:.1f}% | LR: {optimizer.param_groups[0]['lr']:.2e}")
 
-        # 早停
+        # Early Stopping
         if val_loss < best_val_loss - 1e-4:
             best_val_loss = val_loss
             best_state = model.state_dict()
@@ -153,7 +176,7 @@ def train(model, train_data, val_data,
                       f"(no improvement for {early_stop_patience} epochs)")
                 break
 
-    # 恢复最佳并保存最终
+    # 恢复最佳模型
     if best_state is not None:
         model.load_state_dict(best_state)
     os.makedirs('./model', exist_ok=True)
@@ -161,7 +184,9 @@ def train(model, train_data, val_data,
     print("🎯 Final model saved.")
     return history
 
-# ============== 画图 ==============
+# =========================
+# 画训练曲线
+# =========================
 def plot_history(history, out_path='./model/training_curves.png'):
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     epochs = np.arange(1, len(history["train_loss"]) + 1)
@@ -174,7 +199,7 @@ def plot_history(history, out_path='./model/training_curves.png'):
     plt.legend(); plt.grid(True); plt.tight_layout()
     plt.savefig(out_path.replace('.png', '_loss.png')); plt.close()
 
-    # Val MAE
+    # MAE
     plt.figure()
     plt.plot(epochs, history["val_mae"], label='Val MAE (deg)')
     plt.xlabel('Epoch'); plt.ylabel('MAE (deg)'); plt.title('Validation MAE vs. Epoch')
@@ -188,65 +213,49 @@ def plot_history(history, out_path='./model/training_curves.png'):
     plt.legend(); plt.grid(True); plt.tight_layout()
     plt.savefig(out_path.replace('.png', '_hit3.png')); plt.close()
 
-    # LR
+    # Learning Rate
     plt.figure()
     plt.plot(epochs, history["lr"], label='Learning Rate')
     plt.xlabel('Epoch'); plt.ylabel('LR'); plt.title('Learning Rate vs. Epoch')
     plt.legend(); plt.grid(True); plt.tight_layout()
     plt.savefig(out_path.replace('.png', '_lr.png')); plt.close()
 
-# ============== 读取并拼接成 362 维 ==============
+# =========================
+# 数据读取函数
+# =========================
 def load_split(prefix):
     """
-    读取并按行拼接：
-      X_main:            ./mydata/X_{prefix}.csv            -> [N, 360]
-      path_type:         ./mydata/type/Y_{prefix}.csv       -> [N, 1]
-      turn_direction:    ./mydata/towards/Y_{prefix}.csv    -> [N, 1]
-      y(角度):           ./mydata/direction/Y_{prefix}.csv  -> [N, 1]
-    返回:
-      X: [N, 362], y: [N, 1]
+    返回：
+      X_main: [N,360]
+      path_type: [N,1]
+      turn_direction: [N,1]
+      y: [N,1]
     """
     X_main = pd.read_csv(f'./mydata/X_{prefix}.csv', header=None).values.astype(np.float32)
     path_type = pd.read_csv(f'./mydata/type/Y_{prefix}.csv', header=None).values.astype(np.float32)
     turn_direction = pd.read_csv(f'./mydata/towards/Y_{prefix}.csv', header=None).values.astype(np.float32)
     y = pd.read_csv(f'./mydata/direction/Y_{prefix}.csv', header=None).values.astype(np.float32)
 
-    # 形状校验与标准化
-    if X_main.ndim != 2 or X_main.shape[1] != 360:
-        raise ValueError(f'X_{prefix}.csv 形状异常，期望 [N,360]，实际 {X_main.shape}')
-    if path_type.ndim == 1:
-        path_type = path_type.reshape(-1, 1)
-    if turn_direction.ndim == 1:
-        turn_direction = turn_direction.reshape(-1, 1)
-    if y.ndim == 1:
-        y = y.reshape(-1, 1)
+    if path_type.ndim == 1: path_type = path_type.reshape(-1, 1)
+    if turn_direction.ndim == 1: turn_direction = turn_direction.reshape(-1, 1)
+    if y.ndim == 1: y = y.reshape(-1, 1)
+    return X_main, path_type, turn_direction, y
 
-    n = X_main.shape[0]
-    if not (path_type.shape[0] == n and turn_direction.shape[0] == n and y.shape[0] == n):
-        raise ValueError(f'行数不一致：X={n}, type={path_type.shape[0]}, '
-                         f'towards={turn_direction.shape[0]}, y={y.shape[0]}')
-
-    # 按行拼接 -> [N, 362]
-    X = np.hstack([X_main, path_type, turn_direction]).astype(np.float32)
-    return X, y
-
-# ============== 入口 ==============
+# =========================
+# 主入口
+# =========================
 if __name__ == '__main__':
-    # 读取训练/验证集
-    X_train, y_train = load_split('train')
-    X_val,   y_val   = load_split('test')
+    X_train, road_train, turn_train, y_train = load_split('train')
+    X_val,   road_val,   turn_val,   y_val   = load_split('test')
 
-    print('Train shapes:', X_train.shape, y_train.shape)  # (N_train, 362) (N_train, 1)
-    print('Val   shapes:', X_val.shape,   y_val.shape)    # (N_val,   362) (N_val,   1)
+    print('Train shapes:', X_train.shape, road_train.shape, turn_train.shape, y_train.shape)
+    print('Val   shapes:', X_val.shape,   road_val.shape,   turn_val.shape,   y_val.shape)
 
-    # 数据集/加载器
-    train_dataset = LidarRegressionDataset(X_train, y_train)
-    val_dataset   = LidarRegressionDataset(X_val,   y_val)
+    train_dataset = LidarRegressionDataset(X_train, road_train, turn_train, y_train)
+    val_dataset   = LidarRegressionDataset(X_val,   road_val,   turn_val,   y_val)
 
-    # 初始化模型
-    model = RegressionNetwork(dropout_p=0.3).to(device)
+    model = RegressionNetwork(use_embedding=True).to(device)
 
-    # 训练
     history = train(model, train_dataset, val_dataset,
                     num_epochs=1000,
                     batch_size=64,
@@ -255,6 +264,5 @@ if __name__ == '__main__':
                     base_weight=1.0,
                     angle_weight=10.0)
 
-    # 画曲线
     plot_history(history, out_path='./model/training_curves.png')
     print('📈 Curves saved to ./model/training_curves_*')

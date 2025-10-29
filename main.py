@@ -14,6 +14,7 @@ from model_reg import RegressionNetwork
 import numpy as np
 import time
 import pandas as pd
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def resource_path(relative_path):
     try:
@@ -807,9 +808,9 @@ class Simulator(tk.Tk):
                 self.towards = 0
             else:
                 self.towards = 1
-            x_lidar = torch.tensor([second_column_as_row], dtype=torch.float32)  # [1, 360]
-            road_type = torch.tensor([self.road], dtype=torch.long)  # [1]
-            turn_direction = torch.tensor([self.towards], dtype=torch.long)  # [1]
+            x_lidar = torch.tensor([second_column_as_row], dtype=torch.float32).to(device)  # [1, 360]
+            road_type = torch.tensor([self.road], dtype=torch.long).to(device)  # [1]
+            turn_direction = torch.tensor([self.towards], dtype=torch.long).to(device)  # [1]
 
             with torch.no_grad():
                 pred_angle = self.model_reg(x_lidar, road_type, turn_direction).item()
