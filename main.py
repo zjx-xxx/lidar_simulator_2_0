@@ -14,7 +14,7 @@ from model_reg import RegressionNetwork
 import numpy as np
 import time
 import pandas as pd
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def resource_path(relative_path):
     try:
@@ -354,6 +354,7 @@ class Simulator(tk.Tk):
         self.model_reg = RegressionNetwork()
         state_dict_reg = torch.load('./model/model_regression_best.pth', map_location=torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
         self.model_reg.load_state_dict(state_dict_reg)
+        self.model_reg.to(device)
         self.model_reg.eval()
 
         self.predicted_angle = 0.0
@@ -808,16 +809,18 @@ class Simulator(tk.Tk):
                 self.towards = 0
             else:
                 self.towards = 1
-            x_lidar = torch.tensor([second_column_as_row], dtype=torch.float32).to(device)  # [1, 360]
-            road_type = torch.tensor([self.road], dtype=torch.long).to(device)  # [1]
-            turn_direction = torch.tensor([self.towards], dtype=torch.long).to(device)  # [1]
+            x_lidar = torch.tensor([second_column_as_row], dtype=torch.float32, device=device)  # [1, 360]
+            road_type = torch.tensor([self.road], dtype=torch.long, device=device)  # [1]
+            turn_direction = torch.tensor([self.towards], dtype=torch.long, device=device)  # [1]
 
             with torch.no_grad():
-                pred_angle = self.model_reg(x_lidar, road_type, turn_direction).item()
-                pred_angle = np.clip(pred_angle, -30, 30)
-                self.car_control_value[1, 0] = pred_angle
-                self.predicted_angle = pred_angle
-                self.predicted_angle_label.config(text=f"预测舵机角度: {self.predicted_angle:.2f} °")
+                pred = self.model_reg(x_lidar, road_type, turn_direction)  # [1]
+                pred = pred.clamp(-30.0, 30.0)  # 仍是张量
+            pred_angle = float(pred.squeeze(0).item())
+
+            self.car_control_value[1, 0] = pred_angle
+            self.predicted_angle = pred_angle
+            self.predicted_angle_label.config(text=f"预测舵机角度: {self.predicted_angle:.2f} °")
 
             try:
                 speed = float(self.speed_input.get())
