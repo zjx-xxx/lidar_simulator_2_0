@@ -108,7 +108,7 @@ def train(model, train_data, val_data,
 
     optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-5)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode='min', factor=0.5, patience=10, verbose=False
+        optimizer, mode='min', factor=0.5, patience=10
     )
 
     history = {"train_loss": [], "val_loss": [], "val_mae": [], "val_hit3": [], "lr": []}
